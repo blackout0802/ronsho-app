@@ -1250,11 +1250,11 @@ input[type=file] { display:none; }
   max-width: 100%;
 }
 .tagTabSelect:hover { background: #ece2ff; }
-/* 問題演習の科目・分野・暗記済み等・重要度のプルダウンを1行にまとめ、
+/* 問題演習・論証一覧の科目・分野・暗記済み等・重要度のプルダウンを1行にまとめ、
    枠の大きさを揃える（内容の長さに関わらず同じ幅になるようにする） */
-.quizFilterRow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.quizFilterRow > div { flex: 1 1 150px; min-width: 120px; margin-bottom: 0; }
-.quizFilterRow select {
+.filterRow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.filterRow > div { flex: 1 1 150px; min-width: 120px; margin-bottom: 0; }
+.filterRow select {
   width: 100%;
   box-sizing: border-box;
   overflow: hidden;

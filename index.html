@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>論証集アプリ v26.51（問題演習カードの配置を再調整）</title>
+<title>論証集アプリ v26.52（論証一覧の絞り込みを1行にまとめる）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0057e7">
 <link rel="icon" href="assets/icon-192.png">
@@ -22,7 +22,7 @@ try {
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v26.51</span></h1>
+<h1><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v26.52</span></h1>
 <div id="status"></div>
 <div id="syncConflictBanner" class="syncConflictBanner"></div>
 <div id="backupReminderBanner" class="backupReminderBanner"></div>
@@ -64,17 +64,19 @@ try {
 <span class="searchClearBtn" id="searchClearStudy">クリア</span>
 <span class="searchResultCount" id="searchCountStudy"></span>
 </div>
+<div class="filterRow">
 <div id="subjectTabsStudy" class="subjectTabs"></div>
 <div id="categoryTabsStudy" class="categoryTabs"></div>
-<div id="tagTabsStudy" class="categoryTabs"></div>
 <div id="starTabsStudy" class="starFilterTabs"></div>
 <div id="importanceTabsStudy" class="starFilterTabs"></div>
+</div>
+<div id="tagTabsStudy" class="categoryTabs"></div>
 <div id="freqTabsStudy" class="starFilterTabs"></div>
 <div id="tableWrap"></div>
 </div>
 <!-- ▲▲▲ 新規追加：論証一覧タブ ここまで ▲▲▲ -->
 <div id="quizPage" class="page">
-<div class="quizFilterRow">
+<div class="filterRow">
 <div id="subjectTabsQuiz" class="subjectTabs"></div>
 <div id="categoryTabsQuiz" class="categoryTabs"></div>
 <div id="starTabsQuiz" class="starFilterTabs"></div>
