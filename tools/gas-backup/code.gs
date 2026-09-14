@@ -18,6 +18,37 @@ const BACKUP_FOLDER_NAME = 'ronsho-app-backups';
 // 手動バックアップと合わせてすぐに古いものから消えてしまわないよう保持件数を増やしている
 const BACKUP_KEEP_COUNT = 200;
 
+// このウェブアプリのURLは公開リポジトリ・公開ページのソースから誰でも読める場所に
+// あるため、URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまう状態
+// だった。クライアント側(drive-sync.js)はGoogleアカウントでのログインを必須にし、
+// 得られたアクセストークンをリクエストに含めて送ってくる。ここではそのトークンを
+// Googleに問い合わせて実在の・有効なものか確認したうえで、許可したメール
+// アドレスと一致する場合だけリクエストを受け付ける。
+// AUTH_CLIENT_IDはdrive-sync.js側の値と必ず一致させること（非公開情報ではないので
+// ここに書いても問題ない）。ALLOWED_EMAILSにこのアプリの利用を許可する
+// Googleアカウントのメールアドレスを列挙する
+const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
+const ALLOWED_EMAILS = ['black.out0706@gmail.com', 'munenori.ishikawa@skym.co.jp'];
+
+function isAuthorized(token) {
+  if (!token) return false;
+  try {
+    const res = UrlFetchApp.fetch(
+      'https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token),
+      { muteHttpExceptions: true }
+    );
+    if (res.getResponseCode() !== 200) return false;
+    const info = JSON.parse(res.getContentText());
+    // audは「このトークンがどのアプリ向けに発行されたか」。ここが一致しないと、
+    // 同じGoogleアカウントの別アプリ向けトークンを誤って受け付けてしまいかねない
+    if (info.aud !== AUTH_CLIENT_ID) return false;
+    if (!info.email || info.email_verified !== 'true') return false;
+    return ALLOWED_EMAILS.indexOf(info.email) !== -1;
+  } catch (e) {
+    return false;
+  }
+}
+
 function getOrCreateFile() {
   const props = PropertiesService.getScriptProperties();
   const savedId = props.getProperty('FILE_ID');
@@ -76,7 +107,9 @@ function pruneOldBackups(folder) {
   files.slice(BACKUP_KEEP_COUNT).forEach(entry => entry.file.setTrashed(true));
 }
 
-function doGet() {
+function doGet(e) {
+  const token = e && e.parameter && e.parameter.token;
+  if (!isAuthorized(token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
   const file = getOrCreateFile();
   const text = file.getBlob().getDataAsString() || '{"revision":0,"data":{}}';
   return jsonResponse(JSON.parse(text));
@@ -84,6 +117,7 @@ function doGet() {
 
 function doPost(e) {
   const request = JSON.parse(e.postData.contents);
+  if (!isAuthorized(request.token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
   if (request.action === 'backup') {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);

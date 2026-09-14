@@ -91,6 +91,12 @@ function makeMockGas(initial) {
 function loadDevice(gas, opts) {
   opts = opts || {};
   const storage = makeStorage();
+  // 同期用APIはGoogleアカウントでのログインを必須にしているが、このテストは
+  // 同期ロジック自体の検証が目的でGoogle Identity Servicesの実物は使えないため、
+  // 有効期限内のダミートークンをあらかじめ入れておき、ログイン処理自体は
+  // 素通りするようにする（モックGASのfetchImplはtoken項目の中身を見ないので
+  // ダミー値で問題ない）
+  storage.setItem('ronshoAuthTokenV1', JSON.stringify({ token: 'test-token', expiresAt: Date.now() + 3600000 }));
   const { elements, getEl } = makeElements();
   let confirmReturn = !!opts.confirmReturnsUseCloud;
   const sandbox = {
@@ -457,6 +463,24 @@ async function e2e() {
     check('苦手フィルタの既定（生の文字列）がそのまま同期される', devB.storage.getItem('ronshoStarFilterDefaultV1') === 'weak');
     check('過去問ログの既定種別（日本語の生の文字列）がそのまま同期される', devB.storage.getItem('ronshoPastExamDefaultTypeV1') === '新司法試験');
     check('問題演習の既定フィルタ（JSON）が同期される', JSON.parse(devB.storage.getItem('ronshoQuizDefaultFiltersV1')).hideMemorized === true);
+  }
+
+  console.log('\n■ E10: 同期用APIがunauthorized（ログイン許可されたアカウントではない等）を返した場合、ログインエラーとして扱い、この端末のデータは書き換えない');
+  {
+    const gas = { fetchImpl: async () => ({ ok: true, json: async () => ({ ok: false, reason: 'unauthorized' }) }) };
+    const dev = loadDevice(gas);
+    dev.setLocal(K.entries, [mkEntry('民法A', '本文A', '民法')]);
+    dev.api.setRevision(5);
+    dev.api.markSynced(dev.api.snapshot());
+    let caught = null;
+    try {
+      await dev.api.pullFromCloud(false);
+    } catch (e) {
+      caught = e;
+    }
+    check('ログインエラーとして例外が投げられる', !!(caught && caught.isAuthError));
+    check('この端末のデータは変更されない', dev.getLocal(K.entries, []).length === 1);
+    check('保存済みのログイントークンは破棄される', dev.getLocal('ronshoAuthTokenV1', null) === null);
   }
 }
 

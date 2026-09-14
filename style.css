@@ -466,6 +466,18 @@ mark.searchHit { background: #fff176; color: #4a3c00; border-radius: 2px; paddin
   white-space: nowrap;
 }
 .driveSyncPanel #driveSyncState { white-space: nowrap; }
+.driveSyncPanel #driveAuthLoginBtn {
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: linear-gradient(135deg, #0057e7, #00c2ff);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.driveSyncPanel #driveAuthLoginBtn:disabled { opacity: 0.6; cursor: default; }
 .progressCard {
   background: var(--card-bg);
   border-radius: 16px;
