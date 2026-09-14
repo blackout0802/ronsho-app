@@ -833,7 +833,15 @@
       promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
     });
   }
+  // ログイン待ちの間は、バックグラウンドの保険的なポーリング（maybePullIfIdle等）が
+  // 勝手に無言のログイン再試行を繰り返さないようにするためのフラグ。これが無いと、
+  // ページ読み込み時・数十秒おきのポーリング・タブ切り替えのたびにポップアップを
+  // 開こうとしては次々ブロックされ、ブラウザ側のポップアップブロックがますます
+  // 強く効くようになって、ユーザー操作によるログインまで巻き込まれて開けなく
+  // なることがあった
+  let authGateActive = false;
   function showAuthGate() {
+    authGateActive = true;
     let el = document.getElementById('driveAuthGate');
     if (!el) {
       el = document.createElement('div');
@@ -865,6 +873,7 @@
     if (typeof el.hidden !== 'undefined') el.hidden = false;
   }
   function hideAuthGate() {
+    authGateActive = false;
     const el = document.getElementById('driveAuthGate');
     if (el && typeof el.hidden !== 'undefined') el.hidden = true;
   }
@@ -1093,6 +1102,7 @@
   };
   function maybePullIfIdle() {
     if (syncSuspended || syncInFlight) return;
+    if (authGateActive) return; // ログイン待ちの間は、無言の再ログイン試行を繰り返さない
     if (isConflictModalOpen()) return; // 競合の選択待ちの間は取得し直さない
     if (hasUnsyncedLocalChanges()) return; // 未同期のローカル変更があれば、こちらからは取得しない
     const now = Date.now();
@@ -1139,6 +1149,7 @@
     // fetchが失敗して上のqueue()/pullFromCloud()側のcatchが分かりやすい
     // メッセージに置き換えるので、ここでは状態表示のみ更新する
     window.addEventListener('online', () => {
+      if (authGateActive) return; // ログイン待ちの間は、無言の再ログイン試行を繰り返さない
       if (hasUnsyncedLocalChanges()) queue();
       else maybePullIfIdle();
     });
@@ -1152,6 +1163,7 @@
     setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (syncInFlight) return;
+      if (authGateActive) return; // ログイン待ちの間は、無言の再ログイン試行を繰り返さない
       if (isConflictModalOpen()) return;
       if (hasUnsyncedLocalChanges()) queue();
     }, LOCAL_CHANGE_CHECK_INTERVAL_MS);
