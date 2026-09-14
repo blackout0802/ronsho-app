@@ -720,6 +720,34 @@
   function isOfflineError(e) {
     return !!(e && (e.isOffline || !navigator.onLine));
   }
+
+  // 同期用ファイルの上書き保存とは別に、確実に残る「別ファイルとしての保存」を
+  // 自動的に積み重ねておくための保険。クラウド上の同期ファイル自体の
+  // バージョン履歴はGoogleドライブ側の内部都合で間引かれ当てにできないことが
+  // 分かったため（同期のたびに別ファイルとして残る手動バックアップと同じ仕組みを、
+  // 同期成功時にも自動で行う）。頻繁な書き込みでドライブの容量・API呼び出しを
+  // 圧迫しないよう、一定間隔（AUTO_DRIVE_BACKUP_INTERVAL_MS）でしか実行しない。
+  // この間隔の管理用タイムスタンプは端末ごとの内部管理値であり、他端末と揃える
+  // 意味が無いため同期対象には含めない
+  const AUTO_DRIVE_BACKUP_LAST_AT_KEY = 'ronshoLastAutoDriveBackupAtMsV1';
+  const AUTO_DRIVE_BACKUP_INTERVAL_MS = 15 * 60 * 1000;
+  async function maybeAutoBackupToDrive(data) {
+    if (typeof window.ronshoUploadBackupToDrive !== 'function') return;
+    const now = Date.now();
+    const lastAt = Number(localStorage.getItem(AUTO_DRIVE_BACKUP_LAST_AT_KEY));
+    if (Number.isFinite(lastAt) && now - lastAt < AUTO_DRIVE_BACKUP_INTERVAL_MS) return;
+    // 次に取りかかる前に間隔ぶんの予約を先に立てる（アップロードに時間がかかる間に
+    // 別の同期が続けて完了して二重に実行されるのを防ぐ）
+    localStorage.setItem(AUTO_DRIVE_BACKUP_LAST_AT_KEY, String(now));
+    try {
+      const exportedAt = new Date(now).toISOString();
+      const fileName = '自動バックアップ_' + exportedAt.replace(/[:.]/g, '-') + '.json';
+      await window.ronshoUploadBackupToDrive(Object.assign({ exportedAt }, data), fileName);
+    } catch (e) {
+      // 自動バックアップの失敗は同期そのものには影響させない（次の間隔で再試行される）
+    }
+  }
+
   async function pushToCloud() {
     assertOnlineOrThrow();
     const data = snapshot();
@@ -759,6 +787,7 @@
     localStorage.setItem(REVISION_KEY, String(revision));
     markSynced(data);
     state('同期しました（' + new Date().toLocaleTimeString() + '）');
+    maybeAutoBackupToDrive(data);
   }
 
   async function pullFromCloud(isInitial) {
@@ -800,6 +829,7 @@
       }
       adoptRemoteWholesale(remote.data, remoteRevision);
       state('☁️ クラウドの更新を取り込みました（' + new Date().toLocaleTimeString() + '）');
+      maybeAutoBackupToDrive(remote.data);
       return;
     }
     // 両方のrevisionが変わっている。ただし中身（論証・学習記録・その他の同期項目）に

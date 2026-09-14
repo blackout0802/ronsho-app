@@ -14,7 +14,9 @@
 // 古いバックアップは件数上限を超えたら自動的に削除する。
 const FILE_NAME = 'ronsho-app-sync-data.json';
 const BACKUP_FOLDER_NAME = 'ronsho-app-backups';
-const BACKUP_KEEP_COUNT = 30;
+// アプリ側で同期成功のたびに自動バックアップ（最短15分間隔）も行うようになったため、
+// 手動バックアップと合わせてすぐに古いものから消えてしまわないよう保持件数を増やしている
+const BACKUP_KEEP_COUNT = 200;
 
 function getOrCreateFile() {
   const props = PropertiesService.getScriptProperties();
