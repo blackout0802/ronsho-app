@@ -125,6 +125,7 @@ function restoreFromBackupPayload(data) {
   saveCountdowns(Array.isArray(data.countdowns) ? data.countdowns : []);
   if (data.dailyGoal) saveDailyGoal(data.dailyGoal);
   if (data.dailyStats && typeof data.dailyStats === 'object') saveDailyStats(data.dailyStats);
+  if (typeof saveXp === 'function') saveXp(Number(data.xp) || 0);
   // 表示テーマ・ペット・各画面の既定フィルタなど、以前は端末ごとのローカル設定
   // だったものも同期対象になったため、バックアップの復元でも合わせて復元する。
   // 値は元のファイルと同じ形式（生の文字列・数値）でそのまま保存する
