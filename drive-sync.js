@@ -754,45 +754,77 @@
     });
   }
   let gisTokenClient = null;
-  let pendingAuthResolve = null;
-  let pendingAuthReject = null;
+  // requestAccessToken()は同じtoken clientに対して同時に複数呼ぶと、後の呼び出しが
+  // 前の呼び出しのコールバックを乗っ取ってしまい（ボタンを押しても応答が来ず
+  // 「ログイン中…」のまま固まる不具合の原因だった）、これを防ぐため
+  // 「呼び出しごとに固有の番号を振り、その番号あてのコールバックだけを受け取る」
+  // ようにしたうえで、常に1件ずつ順番に実行する（authRequestChainで直列化）
+  let authCallSeq = 0;
+  let currentAuthCall = null; // { seq, resolve, reject }
   function getGisTokenClient() {
     if (!gisTokenClient) {
       gisTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: AUTH_CLIENT_ID,
-        scope: 'email',
+        scope: 'https://www.googleapis.com/auth/userinfo.email',
         callback: (resp) => {
-          const resolveFn = pendingAuthResolve, rejectFn = pendingAuthReject;
-          pendingAuthResolve = null; pendingAuthReject = null;
+          const call = currentAuthCall;
+          if (!call) return; // 既にタイムアウト等で見切りをつけた呼び出しへの遅延応答は無視する
           if (resp && resp.access_token) {
             saveAuthToken(resp.access_token, resp.expires_in);
-            if (resolveFn) resolveFn(resp.access_token);
-          } else if (rejectFn) {
-            rejectFn(new Error('ログインに失敗しました'));
+            call.resolve(resp.access_token);
+          } else {
+            call.reject(new Error('ログインに失敗しました'));
           }
         },
         error_callback: () => {
-          const rejectFn = pendingAuthReject;
-          pendingAuthResolve = null; pendingAuthReject = null;
-          if (rejectFn) rejectFn(new Error('ログインがキャンセルされました'));
+          if (currentAuthCall) currentAuthCall.reject(new Error('ログインがキャンセルされました'));
         }
       });
     }
     return gisTokenClient;
   }
-  // interactive=falseの場合、既にこのブラウザでログイン・許可済みであれば
-  // 画面を出さずに再取得できることがある（できなければ後段でタイムアウトする）
-  async function requestNewToken(interactive) {
-    await ensureGisLoaded();
+  // 呼び出しを1件だけ実行する。呼び出し元同士の直列化はrequestNewToken側で行う
+  function requestNewTokenOnce(interactive) {
     return new Promise((resolve, reject) => {
-      pendingAuthResolve = resolve;
-      pendingAuthReject = reject;
+      const seq = ++authCallSeq;
+      let settled = false;
+      let timer;
+      const finish = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        if (currentAuthCall && currentAuthCall.seq === seq) currentAuthCall = null;
+        clearTimeout(timer);
+        fn(arg);
+      };
+      currentAuthCall = {
+        seq,
+        resolve: v => finish(resolve, v),
+        reject: e => finish(reject, e)
+      };
+      // interactiveはユーザーの操作待ちなので長め、silentは無言の再取得なので
+      // 短めに切り上げる（GISが応答自体を返さないまま固まるケースへの保険）
+      // silent（無言）側は短めに切り上げる。ここを長くすると、ページ読み込み直後の
+      // 自動的な無言再取得がまだ終わっていない間にユーザーが「ログイン」ボタンを
+      // 押した場合、直列化のためポップアップがクリック操作から数秒遅れて開くことに
+      // なり、ブラウザにポップアップブロックされる恐れがあるため
+      timer = setTimeout(() => finish(reject, new Error('ログイン処理がタイムアウトしました')), interactive ? 60000 : 3000);
       try {
         getGisTokenClient().requestAccessToken({ prompt: interactive ? 'consent' : '' });
       } catch (e) {
-        pendingAuthResolve = null; pendingAuthReject = null;
-        reject(e);
+        finish(reject, e);
       }
+    });
+  }
+  // 同じtoken clientへの呼び出しが重ならないよう、常に前の呼び出しの決着後に
+  // 次を実行する（interactive=falseの場合、既にこのブラウザでログイン・許可済み
+  // であれば画面を出さずに再取得できることがある。できなければタイムアウトする）
+  let authRequestChain = Promise.resolve();
+  function requestNewToken(interactive) {
+    return ensureGisLoaded().then(() => {
+      const run = () => requestNewTokenOnce(interactive);
+      const next = authRequestChain.then(run, run);
+      authRequestChain = next.catch(() => {});
+      return next;
     });
   }
   function withTimeout(promise, ms) {
@@ -846,7 +878,7 @@
     if (!sharedAuthPromise) {
       sharedAuthPromise = (async () => {
         try {
-          return await withTimeout(requestNewToken(false), 5000);
+          return await withTimeout(requestNewToken(false), 4000);
         } catch (_) {
           showAuthGate();
           throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Googleでログイン」から操作してください');
