@@ -191,6 +191,22 @@ async function e2e() {
     check('クラウドの内容がそのまま反映される', dev.getLocal(K.entries, []).some(e => e.title === '民法C（他端末で追加）'));
   }
 
+  console.log('\n■ E3b: クラウドだけが更新されているが、論証が大きく減っている（例: 空になっている）場合は、この端末に変更が無くても確認なしでは採用しない');
+  {
+    const cloud = makeCloudStore([], 11);
+    const gas = makeMockGas(cloud);
+    const dev = loadDevice(gas);
+    // この端末は revision=10 時点の状態のまま何も変えていない（論証が複数ある）
+    dev.setLocal(K.entries, [mkEntry('民法A', '本文A', '民法'), mkEntry('民法B', '本文B', '民法')]);
+    dev.api.setRevision(10);
+    dev.api.markSynced(dev.api.snapshot());
+    await dev.api.pullFromCloud(false);
+    check('この端末に変更が無くても、確認なしでは上書きしない（revisionは据え置き）', dev.api.getRevision() === 10);
+    check('この端末の論証は消えずに残る', dev.getLocal(K.entries, []).length === 2);
+    const modalHtml = dev.getEl('driveSyncConflictModal').innerHTML;
+    check('確認ポップアップが表示される', modalHtml.includes('driveSyncConfirmMergeBtn'));
+  }
+
   console.log('\n■ E4: 両方で変更＝本当の競合 → 自動統合せず、項目ごとに選べる確認ポップアップを出す');
   {
     const cloud = makeCloudStore([mkEntry('民法A', '本文A', '民法'), mkEntry('クラウド側の新規', '本文cloud', '民法')], 11);

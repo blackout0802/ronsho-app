@@ -349,6 +349,19 @@
         && editedTitles.size === 0 && studyLogDiffTitles.length === 0 && otherFieldLabels.length === 0
     };
   }
+
+  // クラウド側が何らかの理由で意図せず空・激減した状態になっているのに、
+  // 「この端末に未同期の変更が無い」という理由だけで確認なしに採用してしまうと、
+  // その空データが他端末にもそのまま伝播し、実害の大きいデータ消失につながる。
+  // これを防ぐため、明らかにおかしい減り方をしている場合は自動採用せず、
+  // 通常の競合と同じくユーザーに確認してもらう
+  function isSuspiciousDataLoss(localData, remoteData) {
+    const localCount = ((localData && localData.entries) || []).length;
+    const remoteCount = ((remoteData && remoteData.entries) || []).length;
+    if (localCount === 0) return false; // 元々この端末に論証が無ければ失うものが無い
+    if (remoteCount === 0) return true; // 論証が全部消えているのは明らかにおかしい
+    return remoteCount < localCount * 0.5; // 半分以上減っているのも疑わしい
+  }
   const DIFF_ROWS_SHOWN_MAX = 20;
   // 種類ごとに「何も選ばなかった場合」の既定側を決める。onlyLocal/onlyRemoteは
   // 「片方にしかない論証をなるべく残す」方向（＝両端末の内容を合わせた集合）を
@@ -774,7 +787,17 @@
       return;
     }
     if (!hasUnsyncedLocalChanges()) {
-      // クラウド側だけが更新されている（この端末はまだ何も変えていない）→ そのまま採用してよい
+      // クラウド側だけが更新されている（この端末はまだ何も変えていない）→ そのまま採用してよい。
+      // ただし、クラウド側が論証を大きく失っているように見える場合は、意図しない
+      // データ消失が他端末に伝播するのを防ぐため、確認なしでは採用しない
+      if (isSuspiciousDataLoss(snapshot(), remote.data)) {
+        if (isActivelyStudying()) {
+          await autoResolveConflictFavoringActiveStudy(remote.data, remoteRevision, remote.updatedAt);
+        } else {
+          showSyncConflictModal(remote.data, remoteRevision, remote.updatedAt);
+        }
+        return;
+      }
       adoptRemoteWholesale(remote.data, remoteRevision);
       state('☁️ クラウドの更新を取り込みました（' + new Date().toLocaleTimeString() + '）');
       return;
