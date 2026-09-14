@@ -1,5 +1,18 @@
 (() => {
   const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyB-3irASAEN6amf2QIN74WQNhF4winF8LwO_gfYDFkW4JLw0cTHTUyOHfoPis7Sof5/exec';
+  // 同期用URLは公開リポジトリ・公開ページのソースから誰でも読める場所にあるため、
+  // URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまわないよう、
+  // Googleアカウントでのログインを必須にしている。クライアント側はGoogleの
+  // アクセストークンを取得してGAS側に送るだけで、実際に「誰か」の確認（許可した
+  // メールアドレスかどうか）はGAS側（tools/gas-backup/code.gs）がGoogleに
+  // 問い合わせて行う。CLIENT_IDは非公開情報ではない（クライアント側コードに
+  // 含めて問題ない）が、Google Cloud Console側でこのアプリのURL
+  // （https://blackout0802.github.io）が「承認済みのJavaScript生成元」に
+  // 登録されている必要がある
+  const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
+  // ログインして得たアクセストークンの保存先。端末ごとのログイン状態であり、
+  // 他端末と揃える意味が無いため同期対象には含めない
+  const AUTH_TOKEN_KEY = 'ronshoAuthTokenV1';
   const REVISION_KEY = 'ronshoSyncRevisionV1';
   const LAST_SYNCED_KEY = 'ronshoSyncLastSnapshotV1';
   const ENTRY_KEY = 'ronshoEntries';
@@ -94,14 +107,11 @@
   // バックアップファイルとして専用フォルダに保存される。同期のrevisionには影響しない
   window.ronshoUploadBackupToDrive = async (payload, fileName) => {
     assertOnlineOrThrow();
-    let r;
+    let result;
     try {
-      r = await fetch(SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'backup', data: payload, fileName: fileName })
-      });
+      result = await syncFetchPost({ action: 'backup', data: payload, fileName: fileName });
     } catch (e) {
+      if (e && e.isAuthError) throw e;
       // fetch自体の失敗（オフライン・通信の不安定・ページ移動等）は、Safariでは
       // "Load failed"、Chromeでは"Failed to fetch"のような生のブラウザメッセージに
       // なり分かりにくいため、他の同期処理（pushToCloud等）と同じ言い回しに揃える
@@ -109,8 +119,6 @@
         ? 'オフラインです（オンラインになってからもう一度お試しください）'
         : '通信エラーが発生しました。通信状況を確認してもう一度お試しください（' + e.message + '）');
     }
-    if (!r.ok) throw new Error('アップロードに失敗しました（通信エラー）');
-    const result = await r.json();
     if (!result.ok) throw new Error('アップロードに失敗しました');
     return result;
   };
@@ -548,15 +556,9 @@
   async function resolveConflictKeepLocal() {
     try {
       // 選択の間に更に更新されている可能性があるため、最新のrevisionを取り直してから上書きする
-      const r = await fetch(SYNC_URL, { cache: 'no-store' });
-      const remote = await r.json();
+      const remote = await syncFetchGet();
       const data = snapshot();
-      const r2 = await fetch(SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ revision: remote.revision || 0, data })
-      });
-      const result = await r2.json();
+      const result = await syncFetchPost({ revision: remote.revision || 0, data });
       if (result.ok) {
         revision = result.result.revision;
         localStorage.setItem(REVISION_KEY, String(revision));
@@ -567,7 +569,7 @@
         showSyncConflictModal(result.latest.data, result.latest.revision || 0, result.latest.updatedAt);
       }
     } catch (e) {
-      state('保存に失敗しました: ' + e.message);
+      state(e && e.isAuthError ? ('🔒 ' + e.message) : ('保存に失敗しました: ' + e.message));
     }
   }
   // 表示中の全ての差分行（省略されている「他N件」も含む）の選択を、
@@ -627,14 +629,8 @@
   async function resolveConflictManualMerge(mergedData, remoteRevision) {
     try {
       // 選択の間に更に更新されている可能性があるため、最新のrevisionを取り直してから保存する
-      const r = await fetch(SYNC_URL, { cache: 'no-store' });
-      const remote = await r.json();
-      const r2 = await fetch(SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ revision: remote.revision || 0, data: mergedData })
-      });
-      const result = await r2.json();
+      const remote = await syncFetchGet();
+      const result = await syncFetchPost({ revision: remote.revision || 0, data: mergedData });
       if (result.ok) {
         revision = result.result.revision;
         localStorage.setItem(REVISION_KEY, String(revision));
@@ -646,7 +642,7 @@
         showSyncConflictModal(result.latest.data, result.latest.revision || 0, result.latest.updatedAt);
       }
     } catch (e) {
-      state(isOfflineError(e) ? '📴 オフラインのため保存できません（オンラインになってからもう一度お試しください）' : ('保存に失敗しました: ' + e.message));
+      state(e && e.isAuthError ? ('🔒 ' + e.message) : (isOfflineError(e) ? '📴 オフラインのため保存できません（オンラインになってからもう一度お試しください）' : ('保存に失敗しました: ' + e.message)));
     }
   }
 
@@ -679,14 +675,8 @@
     const merged = buildManualMergeSnapshot(diff, localData, remoteData, new Map(), 'local');
     try {
       // 選択の間に更に更新されている可能性があるため、最新のrevisionを取り直してから保存する
-      const r = await fetch(SYNC_URL, { cache: 'no-store' });
-      const remote = await r.json();
-      const r2 = await fetch(SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ revision: remote.revision || 0, data: merged })
-      });
-      const result = await r2.json();
+      const remote = await syncFetchGet();
+      const result = await syncFetchPost({ revision: remote.revision || 0, data: merged });
       if (result.ok) {
         revision = result.result.revision;
         localStorage.setItem(REVISION_KEY, String(revision));
@@ -702,7 +692,7 @@
       // 短時間に何度も競合が起きるなど想定外の状況では、安全側に倒して通常の確認ポップアップを出す
       if (result.latest) showSyncConflictModal(result.latest.data, result.latest.revision || 0, result.latest.updatedAt);
     } catch (e) {
-      state(isOfflineError(e) ? '📴 オフラインのため保存できません（オンラインになってからもう一度お試しください）' : ('保存に失敗しました: ' + e.message));
+      state(e && e.isAuthError ? ('🔒 ' + e.message) : (isOfflineError(e) ? '📴 オフラインのため保存できません（オンラインになってからもう一度お試しください）' : ('保存に失敗しました: ' + e.message)));
     }
   }
   // ▲▲▲ 学習中の端末を競合時に優先する仕組み ここまで ▲▲▲
@@ -719,6 +709,185 @@
   }
   function isOfflineError(e) {
     return !!(e && (e.isOffline || !navigator.onLine));
+  }
+
+  // --- Googleアカウントによるログイン ---
+  function loadAuthToken() {
+    try {
+      const raw = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.token || !obj.expiresAt || Date.now() >= obj.expiresAt) return null;
+      return obj.token;
+    } catch (_) { return null; }
+  }
+  function saveAuthToken(token, expiresInSec) {
+    // 期限ギリギリで使ってサーバー側に拒否されるのを避けるため、少し余裕を持たせて期限を切る
+    const ttlMs = (Number(expiresInSec) || 3600) * 1000;
+    localStorage.setItem(AUTH_TOKEN_KEY, JSON.stringify({ token, expiresAt: Date.now() + ttlMs - 60000 }));
+  }
+  function clearAuthToken() {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+  function makeAuthError(message) {
+    const e = new Error(message);
+    e.isAuthError = true;
+    return e;
+  }
+  // index.htmlで<script>読み込み済みのGoogle Identity Servicesライブラリが
+  // 使えるようになるまで待つ（読み込みは非同期・かつ先行してdrive-sync.jsの
+  // 方が先に実行され得るため）。長時間待っても読み込めない場合は諦める
+  function ensureGisLoaded() {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      let tries = 0;
+      const iv = setInterval(() => {
+        tries++;
+        if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+          clearInterval(iv);
+          resolve();
+        } else if (tries > 100) {
+          clearInterval(iv);
+          reject(new Error('Googleログイン機能の読み込みに失敗しました'));
+        }
+      }, 100);
+    });
+  }
+  let gisTokenClient = null;
+  let pendingAuthResolve = null;
+  let pendingAuthReject = null;
+  function getGisTokenClient() {
+    if (!gisTokenClient) {
+      gisTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: AUTH_CLIENT_ID,
+        scope: 'email',
+        callback: (resp) => {
+          const resolveFn = pendingAuthResolve, rejectFn = pendingAuthReject;
+          pendingAuthResolve = null; pendingAuthReject = null;
+          if (resp && resp.access_token) {
+            saveAuthToken(resp.access_token, resp.expires_in);
+            if (resolveFn) resolveFn(resp.access_token);
+          } else if (rejectFn) {
+            rejectFn(new Error('ログインに失敗しました'));
+          }
+        },
+        error_callback: () => {
+          const rejectFn = pendingAuthReject;
+          pendingAuthResolve = null; pendingAuthReject = null;
+          if (rejectFn) rejectFn(new Error('ログインがキャンセルされました'));
+        }
+      });
+    }
+    return gisTokenClient;
+  }
+  // interactive=falseの場合、既にこのブラウザでログイン・許可済みであれば
+  // 画面を出さずに再取得できることがある（できなければ後段でタイムアウトする）
+  async function requestNewToken(interactive) {
+    await ensureGisLoaded();
+    return new Promise((resolve, reject) => {
+      pendingAuthResolve = resolve;
+      pendingAuthReject = reject;
+      try {
+        getGisTokenClient().requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      } catch (e) {
+        pendingAuthResolve = null; pendingAuthReject = null;
+        reject(e);
+      }
+    });
+  }
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('タイムアウトしました')), ms);
+      promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+    });
+  }
+  function showAuthGate() {
+    let el = document.getElementById('driveAuthGate');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'driveAuthGate';
+      el.className = 'driveSyncPanel';
+      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です '
+        + '<button id="driveAuthLoginBtn" type="button">Googleでログイン</button>';
+      const slot = document.getElementById('driveSyncPanelSlot');
+      const row = document.getElementById('topStatusRow');
+      if (slot) slot.appendChild(el);
+      else if (row) row.appendChild(el);
+      else status.after(el);
+      const loginBtn = document.getElementById('driveAuthLoginBtn');
+      if (loginBtn) {
+        loginBtn.onclick = () => {
+          loginBtn.disabled = true;
+          loginBtn.textContent = '⏳ ログイン中…';
+          requestNewToken(true).then(() => {
+            hideAuthGate();
+            pullFromCloud(true).catch(e => state(e && e.isAuthError ? ('🔒 ' + e.message) : ('同期に失敗しました: ' + e.message)));
+          }).catch(e => {
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Googleでログイン';
+            state(e.message);
+          });
+        };
+      }
+    }
+    if (typeof el.hidden !== 'undefined') el.hidden = false;
+  }
+  function hideAuthGate() {
+    const el = document.getElementById('driveAuthGate');
+    if (el && typeof el.hidden !== 'undefined') el.hidden = true;
+  }
+  // 有効なトークンが無ければ、まず無言での再取得を試し（既にログイン済みなら
+  // 画面を出さずに済む）、それも失敗したらログイン案内を表示してエラーにする。
+  // 複数箇所から同時に呼ばれても、ログイン試行が重複しないようにする
+  let sharedAuthPromise = null;
+  async function ensureAuthToken() {
+    const cached = loadAuthToken();
+    if (cached) return cached;
+    if (!sharedAuthPromise) {
+      sharedAuthPromise = (async () => {
+        try {
+          return await withTimeout(requestNewToken(false), 5000);
+        } catch (_) {
+          showAuthGate();
+          throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Googleでログイン」から操作してください');
+        }
+      })();
+    }
+    try {
+      return await sharedAuthPromise;
+    } finally {
+      sharedAuthPromise = null;
+    }
+  }
+  function isUnauthorizedBody(body) {
+    return !!(body && body.ok === false && body.reason === 'unauthorized');
+  }
+  async function syncFetchGet() {
+    const token = await ensureAuthToken();
+    const r = await fetch(SYNC_URL + '?token=' + encodeURIComponent(token), { cache: 'no-store' });
+    if (!r.ok) throw new Error('クラウドからの取得に失敗しました');
+    const body = await r.json();
+    if (isUnauthorizedBody(body)) {
+      clearAuthToken();
+      showAuthGate();
+      throw makeAuthError('ログインの有効期限が切れたか、許可されていないアカウントです。もう一度ログインしてください');
+    }
+    return body;
+  }
+  async function syncFetchPost(obj) {
+    const token = await ensureAuthToken();
+    const r = await fetch(SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ token }, obj))
+    });
+    const body = await r.json();
+    if (isUnauthorizedBody(body)) {
+      clearAuthToken();
+      showAuthGate();
+      throw makeAuthError('ログインの有効期限が切れたか、許可されていないアカウントです。もう一度ログインしてください');
+    }
+    return body;
   }
 
   // 同期用ファイルの上書き保存とは別に、確実に残る「別ファイルとしての保存」を
@@ -751,13 +920,7 @@
   async function pushToCloud() {
     assertOnlineOrThrow();
     const data = snapshot();
-    const r = await fetch(SYNC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ revision, data })
-    });
-    if (!r.ok) throw new Error('保存に失敗しました');
-    const result = await r.json();
+    const result = await syncFetchPost({ revision, data });
     if (!result.ok && result.reason === 'conflict') {
       if (result.latest) {
         // revision番号がずれていただけで、中身（論証・学習記録・その他の同期項目）に
@@ -792,9 +955,7 @@
 
   async function pullFromCloud(isInitial) {
     assertOnlineOrThrow();
-    const r = await fetch(SYNC_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error('クラウドからの取得に失敗しました');
-    const remote = await r.json();
+    const remote = await syncFetchGet();
     const remoteRevision = remote.revision || 0;
     if (isInitial && remoteRevision === 0 && hasLocalData()) {
       // クラウドが未使用（初回）かつ端末側にデータがある場合は、こちらのデータを送る
@@ -936,7 +1097,10 @@
       syncNow().catch(e => state(isOfflineError(e) ? '📴 オフラインです（変更はこの端末に保存されています）' : e.message));
     };
 
-    pullFromCloud(true).catch(e => state(isOfflineError(e) ? '📴 オフラインで起動しました（この端末のデータで動作します。オンラインになると自動的に同期します）' : 'オフラインで動作中（' + e.message + '）'));
+    pullFromCloud(true).catch(e => {
+      if (e && e.isAuthError) { state('🔒 ' + e.message); return; }
+      state(isOfflineError(e) ? '📴 オフラインで起動しました（この端末のデータで動作します。オンラインになると自動的に同期します）' : 'オフラインで動作中（' + e.message + '）');
+    });
 
     // オンラインに復帰した瞬間に、保険のポーリング（最大10秒）を待たず
     // すぐに再送・再取得を試みる。オフラインに変わった瞬間は、進行中の
