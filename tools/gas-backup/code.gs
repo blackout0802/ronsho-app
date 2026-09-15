@@ -20,11 +20,11 @@ const BACKUP_KEEP_COUNT = 200;
 
 // このウェブアプリのURLは公開リポジトリ・公開ページのソースから誰でも読める場所に
 // あるため、URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまう状態
-// だった。クライアント側(drive-sync.js)はGoogleアカウントでのログイン（Googleが
-// 提供する「Googleでログイン」ボタン）を必須にし、得られたIDトークン(JWT)を
-// リクエストに含めて送ってくる。ここではそのトークンをGoogleに問い合わせて
-// 実在の・有効なものか確認したうえで、許可したメールアドレスと一致する場合だけ
-// リクエストを受け付ける。
+// だった。クライアント側(drive-sync.js)はGoogleアカウントでのログイン（ページ全体を
+// Googleのログイン画面へ移動するOAuth 2.0 Implicit Grant方式）を必須にし、
+// 得られたアクセストークンをリクエストに含めて送ってくる。ここではそのトークンを
+// Googleに問い合わせて実在の・有効なものか確認したうえで、許可したメール
+// アドレスと一致する場合だけリクエストを受け付ける。
 // AUTH_CLIENT_IDはdrive-sync.js側の値と必ず一致させること（非公開情報ではないので
 // ここに書いても問題ない）。ALLOWED_EMAILSにこのアプリの利用を許可する
 // Googleアカウントのメールアドレスを列挙する
@@ -35,7 +35,7 @@ function isAuthorized(token) {
   if (!token) return false;
   try {
     const res = UrlFetchApp.fetch(
-      'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token),
+      'https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token),
       { muteHttpExceptions: true }
     );
     if (res.getResponseCode() !== 200) return false;
