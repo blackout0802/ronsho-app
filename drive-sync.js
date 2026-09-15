@@ -794,7 +794,9 @@
       body: JSON.stringify({ action: 'exchange_code', code: code, redirect_uri: authRedirectUri() })
     });
     const body = await r.json();
-    if (!body || !body.ok || !body.token) throw new Error('ログイン処理に失敗しました');
+    if (!body || !body.ok || !body.token) {
+      throw new Error('ログイン処理に失敗しました' + (body && body.message ? '（' + body.message + '）' : (body && body.reason ? '（' + body.reason + '）' : '')));
+    }
     saveAuthToken(body.token, body.expires_in);
   }
   // ページ読み込み時、Googleのログイン画面から戻ってきた直後であれば、
@@ -805,8 +807,9 @@
     try {
       await exchangeAuthCode(code);
     } catch (e) {
-      // 失敗しても致命的ではない。この後ensureAuthToken()が改めてログイン
-      // 案内を表示するので、ここでは何もしない
+      // 失敗した理由が分かるよう画面にも残しておく（この後ensureAuthToken()が
+      // 改めてログイン案内を表示する）
+      state('🔒 ' + e.message);
     }
   })();
   function showAuthGate() {
