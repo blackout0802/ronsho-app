@@ -2,15 +2,15 @@
   const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyB-3irASAEN6amf2QIN74WQNhF4winF8LwO_gfYDFkW4JLw0cTHTUyOHfoPis7Sof5/exec';
   // 同期用URLは公開リポジトリ・公開ページのソースから誰でも読める場所にあるため、
   // URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまわないよう、
-  // Googleアカウントでのログインを必須にしている。クライアント側はGoogleの
-  // アクセストークンを取得してGAS側に送るだけで、実際に「誰か」の確認（許可した
-  // メールアドレスかどうか）はGAS側（tools/gas-backup/code.gs）がGoogleに
-  // 問い合わせて行う。CLIENT_IDは非公開情報ではない（クライアント側コードに
-  // 含めて問題ない）が、Google Cloud Console側でこのアプリのURL
-  // （https://blackout0802.github.io）が「承認済みのJavaScript生成元」に
-  // 登録されている必要がある
+  // Googleアカウントでのログインを必須にしている。クライアント側は「Googleで
+  // ログイン」ボタン（google.accounts.id）でIDトークン(JWT)を取得してGAS側に
+  // 送るだけで、実際に「誰か」の確認（許可したメールアドレスかどうか）はGAS側
+  // （tools/gas-backup/code.gs）がGoogleに問い合わせて行う。CLIENT_IDは非公開
+  // 情報ではない（クライアント側コードに含めて問題ない）が、Google Cloud
+  // Console側でこのアプリのURL（https://blackout0802.github.io）が
+  // 「承認済みのJavaScript生成元」に登録されている必要がある
   const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
-  // ログインして得たアクセストークンの保存先。端末ごとのログイン状態であり、
+  // ログインして得たIDトークンの保存先。端末ごとのログイン状態であり、
   // 他端末と揃える意味が無いため同期対象には含めない
   const AUTH_TOKEN_KEY = 'ronshoAuthTokenV1';
   const REVISION_KEY = 'ronshoSyncRevisionV1';
@@ -734,16 +734,22 @@
     e.isAuthError = true;
     return e;
   }
-  // index.htmlで<script>読み込み済みのGoogle Identity Servicesライブラリが
-  // 使えるようになるまで待つ（読み込みは非同期・かつ先行してdrive-sync.jsの
-  // 方が先に実行され得るため）。長時間待っても読み込めない場合は諦める
+  // 当初はgoogle.accounts.oauth2.initTokenClient()のポップアップ方式で実装していたが、
+  // GitHub Pagesが送るCross-Origin-Opener-Policyヘッダーにより、ポップアップの
+  // window.closed監視がブラウザにブロックされ、ログイン自体は完了してもアプリ側が
+  // それを検知できず「ログイン中…」のまま固まる不具合が実機で確認された
+  // （コンソールに "Cross-Origin-Opener-Policy policy would block the
+  // window.closed call" と出る）。GitHub Pagesは静的ホスティングのためこの
+  // レスポンスヘッダー自体を変更できないので、この制約の影響を受けない
+  // google.accounts.id（Googleが提供する「Googleでログイン」ボタンそのもの。
+  // 内部でCOOPを考慮した安全な方式が使われる）に切り替えている
   function ensureGisLoaded() {
-    if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
+    if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve();
     return new Promise((resolve, reject) => {
       let tries = 0;
       const iv = setInterval(() => {
         tries++;
-        if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        if (window.google && window.google.accounts && window.google.accounts.id) {
           clearInterval(iv);
           resolve();
         } else if (tries > 100) {
@@ -753,93 +759,31 @@
       }, 100);
     });
   }
-  let gisTokenClient = null;
-  // requestAccessToken()は同じtoken clientに対して同時に複数呼ぶと、後の呼び出しが
-  // 前の呼び出しのコールバックを乗っ取ってしまい（ボタンを押しても応答が来ず
-  // 「ログイン中…」のまま固まる不具合の原因だった）、これを防ぐため
-  // 「呼び出しごとに固有の番号を振り、その番号あてのコールバックだけを受け取る」
-  // ようにしたうえで、常に1件ずつ順番に実行する（authRequestChainで直列化）
-  let authCallSeq = 0;
-  let currentAuthCall = null; // { seq, resolve, reject }
-  function getGisTokenClient() {
-    if (!gisTokenClient) {
-      gisTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: AUTH_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/userinfo.email',
-        callback: (resp) => {
-          const call = currentAuthCall;
-          if (!call) return; // 既にタイムアウト等で見切りをつけた呼び出しへの遅延応答は無視する
-          if (resp && resp.access_token) {
-            saveAuthToken(resp.access_token, resp.expires_in);
-            call.resolve(resp.access_token);
-          } else {
-            call.reject(new Error('ログインに失敗しました'));
-          }
-        },
-        error_callback: () => {
-          if (currentAuthCall) currentAuthCall.reject(new Error('ログインがキャンセルされました'));
-        }
-      });
-    }
-    return gisTokenClient;
-  }
-  // 呼び出しを1件だけ実行する。呼び出し元同士の直列化はrequestNewToken側で行う
-  function requestNewTokenOnce(interactive) {
-    return new Promise((resolve, reject) => {
-      const seq = ++authCallSeq;
-      let settled = false;
-      let timer;
-      const finish = (fn, arg) => {
-        if (settled) return;
-        settled = true;
-        if (currentAuthCall && currentAuthCall.seq === seq) currentAuthCall = null;
-        clearTimeout(timer);
-        fn(arg);
-      };
-      currentAuthCall = {
-        seq,
-        resolve: v => finish(resolve, v),
-        reject: e => finish(reject, e)
-      };
-      // interactiveはユーザーの操作待ちなので長め、silentは無言の再取得なので
-      // 短めに切り上げる（GISが応答自体を返さないまま固まるケースへの保険）
-      // silent（無言）側は短めに切り上げる。ここを長くすると、ページ読み込み直後の
-      // 自動的な無言再取得がまだ終わっていない間にユーザーが「ログイン」ボタンを
-      // 押した場合、直列化のためポップアップがクリック操作から数秒遅れて開くことに
-      // なり、ブラウザにポップアップブロックされる恐れがあるため
-      timer = setTimeout(() => finish(reject, new Error('ログイン処理がタイムアウトしました')), interactive ? 60000 : 3000);
-      try {
-        getGisTokenClient().requestAccessToken({ prompt: interactive ? 'consent' : '' });
-      } catch (e) {
-        finish(reject, e);
-      }
-    });
-  }
-  // 同じtoken clientへの呼び出しが重ならないよう、常に前の呼び出しの決着後に
-  // 次を実行する（interactive=falseの場合、既にこのブラウザでログイン・許可済み
-  // であれば画面を出さずに再取得できることがある。できなければタイムアウトする）
-  let authRequestChain = Promise.resolve();
-  function requestNewToken(interactive) {
-    return ensureGisLoaded().then(() => {
-      const run = () => requestNewTokenOnce(interactive);
-      const next = authRequestChain.then(run, run);
-      authRequestChain = next.catch(() => {});
-      return next;
-    });
-  }
-  function withTimeout(promise, ms) {
-    return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('タイムアウトしました')), ms);
-      promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
-    });
-  }
   // ログイン待ちの間は、バックグラウンドの保険的なポーリング（maybePullIfIdle等）が
-  // 勝手に無言のログイン再試行を繰り返さないようにするためのフラグ。これが無いと、
-  // ページ読み込み時・数十秒おきのポーリング・タブ切り替えのたびにポップアップを
-  // 開こうとしては次々ブロックされ、ブラウザ側のポップアップブロックがますます
-  // 強く効くようになって、ユーザー操作によるログインまで巻き込まれて開けなく
-  // なることがあった
+  // 何度もensureAuthTokenを呼んでログイン案内の再表示を繰り返さないようにするフラグ
   let authGateActive = false;
+  let gisIdInitialized = false;
+  function decodeJwtExpiry(jwt) {
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (payload && payload.exp) return Math.max(60, payload.exp - Math.floor(Date.now() / 1000));
+    } catch (_) {}
+    return 3600;
+  }
+  function handleCredentialResponse(response) {
+    if (!response || !response.credential) return;
+    saveAuthToken(response.credential, decodeJwtExpiry(response.credential));
+    hideAuthGate();
+    pullFromCloud(true).catch(e => state(e && e.isAuthError ? ('🔒 ' + e.message) : ('同期に失敗しました: ' + e.message)));
+  }
+  function ensureGisIdInitialized() {
+    if (gisIdInitialized) return;
+    google.accounts.id.initialize({
+      client_id: AUTH_CLIENT_ID,
+      callback: handleCredentialResponse
+    });
+    gisIdInitialized = true;
+  }
   function showAuthGate() {
     authGateActive = true;
     let el = document.getElementById('driveAuthGate');
@@ -847,58 +791,36 @@
       el = document.createElement('div');
       el.id = 'driveAuthGate';
       el.className = 'driveSyncPanel';
-      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です '
-        + '<button id="driveAuthLoginBtn" type="button">Googleでログイン</button>';
+      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です <div id="driveAuthLoginBtnWrap"></div>';
       const slot = document.getElementById('driveSyncPanelSlot');
       const row = document.getElementById('topStatusRow');
       if (slot) slot.appendChild(el);
       else if (row) row.appendChild(el);
       else status.after(el);
-      const loginBtn = document.getElementById('driveAuthLoginBtn');
-      if (loginBtn) {
-        loginBtn.onclick = () => {
-          loginBtn.disabled = true;
-          loginBtn.textContent = '⏳ ログイン中…';
-          requestNewToken(true).then(() => {
-            hideAuthGate();
-            pullFromCloud(true).catch(e => state(e && e.isAuthError ? ('🔒 ' + e.message) : ('同期に失敗しました: ' + e.message)));
-          }).catch(e => {
-            loginBtn.disabled = false;
-            loginBtn.textContent = 'Googleでログイン';
-            state(e.message);
-          });
-        };
-      }
     }
     if (typeof el.hidden !== 'undefined') el.hidden = false;
+    // Googleが提供する本物の「Googleでログイン」ボタンをその場に描画する
+    // （ポップアップ・COOPまわりの面倒な処理は全てこのボタン側に任せる）
+    ensureGisLoaded().then(() => {
+      ensureGisIdInitialized();
+      const wrap = document.getElementById('driveAuthLoginBtnWrap');
+      if (wrap && !wrap.hasChildNodes()) {
+        google.accounts.id.renderButton(wrap, { theme: 'filled_blue', size: 'medium', text: 'signin', locale: 'ja' });
+      }
+    }).catch(e => state(e.message));
   }
   function hideAuthGate() {
     authGateActive = false;
     const el = document.getElementById('driveAuthGate');
     if (el && typeof el.hidden !== 'undefined') el.hidden = true;
   }
-  // 有効なトークンが無ければ、まず無言での再取得を試し（既にログイン済みなら
-  // 画面を出さずに済む）、それも失敗したらログイン案内を表示してエラーにする。
-  // 複数箇所から同時に呼ばれても、ログイン試行が重複しないようにする
-  let sharedAuthPromise = null;
+  // キャッシュ済みの有効なトークンがあればそれを使う。無ければログイン案内
+  // （Googleの公式ボタン）を表示し、ユーザーのクリックを待つ他ない
   async function ensureAuthToken() {
     const cached = loadAuthToken();
     if (cached) return cached;
-    if (!sharedAuthPromise) {
-      sharedAuthPromise = (async () => {
-        try {
-          return await withTimeout(requestNewToken(false), 4000);
-        } catch (_) {
-          showAuthGate();
-          throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Googleでログイン」から操作してください');
-        }
-      })();
-    }
-    try {
-      return await sharedAuthPromise;
-    } finally {
-      sharedAuthPromise = null;
-    }
+    showAuthGate();
+    throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Sign in with Google」ボタンから操作してください');
   }
   function isUnauthorizedBody(body) {
     return !!(body && body.ok === false && body.reason === 'unauthorized');
