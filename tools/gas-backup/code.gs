@@ -21,13 +21,19 @@ const BACKUP_KEEP_COUNT = 200;
 // このウェブアプリのURLは公開リポジトリ・公開ページのソースから誰でも読める場所に
 // あるため、URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまう状態
 // だった。クライアント側(drive-sync.js)はGoogleアカウントでのログイン（ページ全体を
-// Googleのログイン画面へ移動するOAuth 2.0 Implicit Grant方式）を必須にし、
-// 得られたアクセストークンをリクエストに含めて送ってくる。ここではそのトークンを
+// Googleのログイン画面へ移動する認可コードフロー）を必須にしている。
+// クライアント側はGoogleから受け取った認可コード(code)をここに送ってくるだけで、
+// それをアクセストークンに交換する処理（クライアントシークレットが必要）は
+// この関数（サーバー側）でのみ行う。交換して得られたアクセストークンを
 // Googleに問い合わせて実在の・有効なものか確認したうえで、許可したメール
 // アドレスと一致する場合だけリクエストを受け付ける。
 // AUTH_CLIENT_IDはdrive-sync.js側の値と必ず一致させること（非公開情報ではないので
 // ここに書いても問題ない）。ALLOWED_EMAILSにこのアプリの利用を許可する
-// Googleアカウントのメールアドレスを列挙する
+// Googleアカウントのメールアドレスを列挙する。
+// CLIENT_SECRETは絶対にこのファイル（公開リポジトリ）に書かないこと。
+// GASエディタの「プロジェクトの設定」(⚙️)→「スクリプト プロパティ」で、
+// プロパティ名 CLIENT_SECRET・値はGoogle Cloud Consoleの同じOAuthクライアントの
+// ページに表示されている「クライアント シークレット」を登録して使う
 const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
 const ALLOWED_EMAILS = ['black.out0706@gmail.com', 'munenori.ishikawa@skym.co.jp'];
 
@@ -48,6 +54,28 @@ function isAuthorized(token) {
   } catch (e) {
     return false;
   }
+}
+
+// クライアント側から受け取った認可コードを、Googleのトークンエンドポイントで
+// アクセストークンに交換する。ここでしかクライアントシークレットを使わない
+function handleCodeExchange(request) {
+  const secret = PropertiesService.getScriptProperties().getProperty('CLIENT_SECRET');
+  if (!secret) return jsonResponse({ ok: false, reason: 'server_not_configured' });
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post',
+    payload: {
+      code: request.code,
+      client_id: AUTH_CLIENT_ID,
+      client_secret: secret,
+      redirect_uri: request.redirect_uri,
+      grant_type: 'authorization_code'
+    },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) return jsonResponse({ ok: false, reason: 'exchange_failed' });
+  const tokenData = JSON.parse(res.getContentText());
+  if (!isAuthorized(tokenData.access_token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
+  return jsonResponse({ ok: true, token: tokenData.access_token, expires_in: tokenData.expires_in });
 }
 
 function getOrCreateFile() {
@@ -118,6 +146,17 @@ function doGet(e) {
 
 function doPost(e) {
   const request = JSON.parse(e.postData.contents);
+  if (request.action === 'exchange_code') {
+    // この時点ではまだトークンを持っていない（これから取得する）ため、
+    // 他のactionのようなisAuthorizedチェックの対象外にする
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      return handleCodeExchange(request);
+    } finally {
+      lock.releaseLock();
+    }
+  }
   if (!isAuthorized(request.token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
   if (request.action === 'backup') {
     const lock = LockService.getScriptLock();
