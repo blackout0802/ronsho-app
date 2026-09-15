@@ -762,16 +762,20 @@
   function authRedirectUri() {
     return 'https://blackout0802.github.io/ronsho-app/';
   }
+  // URLSearchParamsは実装によって細かな挙動差があるため使わず、単純な文字列
+  // 組み立て/分解だけで済ませる（Safari実機で「The string did not match the
+  // expected pattern.」という互換性由来のエラーが発生したため）
   function buildAuthRedirectUrl() {
-    const params = new URLSearchParams({
+    const params = {
       client_id: AUTH_CLIENT_ID,
       redirect_uri: authRedirectUri(),
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/userinfo.email',
       access_type: 'online',
       prompt: 'select_account'
-    });
-    return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+    };
+    const qs = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
+    return 'https://accounts.google.com/o/oauth2/v2/auth?' + qs;
   }
   // ページ読み込み時に、Googleのログイン画面から戻ってきた直後かどうかを
   // URLの?以降（クエリ文字列。認可コードフローではフラグメントではなくこちらに付く）
@@ -782,14 +786,26 @@
     if (typeof window === 'undefined' || !window.location) return null;
     const search = window.location.search;
     if (!search || search.indexOf('code=') === -1) return null;
-    const params = new URLSearchParams(search.replace(/^\?/, ''));
-    const code = params.get('code');
-    const error = params.get('error');
+    // 解析より先にURLから消しておく。解析中に何か失敗しても、認可コードが
+    // URLに残り続けて開くたびに同じ処理を繰り返してしまうのを防ぐため
     if (typeof history !== 'undefined' && history.replaceState) {
       history.replaceState(null, '', window.location.pathname);
     }
-    if (error || !code) return null;
-    return code;
+    try {
+      let code = null, error = null;
+      search.replace(/^\?/, '').split('&').forEach(pair => {
+        if (!pair) return;
+        const idx = pair.indexOf('=');
+        const key = decodeURIComponent(idx === -1 ? pair : pair.slice(0, idx));
+        const value = idx === -1 ? '' : decodeURIComponent(pair.slice(idx + 1).replace(/\+/g, ' '));
+        if (key === 'code') code = value;
+        if (key === 'error') error = value;
+      });
+      if (error || !code) return null;
+      return code;
+    } catch (e) {
+      return null;
+    }
   }
   // 受け取った認可コードをGAS側に送り、トークンに交換してもらう
   async function exchangeAuthCode(code) {
