@@ -754,8 +754,13 @@
   // 「承認済みのリダイレクトURI」にこのアプリのURLを登録する必要がある
   // （Implicit Grantの時と同じ欄・同じ値でよい）
   let authGateActive = false;
+  // 常に固定のURLを使う（window.location.pathnameから組み立てない）。
+  // ホーム画面に追加したアプリはmanifest.jsonのstart_url（./index.html）の
+  // 関係で通常ブラウザとは異なるパス（.../ronsho-app/index.html）で開かれることが
+  // あり、そのまま使うとGoogle Cloud Consoleに登録したリダイレクトURIと
+  // 一致せずredirect_uri_mismatchになってしまうため
   function authRedirectUri() {
-    return window.location.origin + window.location.pathname;
+    return 'https://blackout0802.github.io/ronsho-app/';
   }
   function buildAuthRedirectUrl() {
     const params = new URLSearchParams({
