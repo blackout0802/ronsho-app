@@ -10,3 +10,101 @@
   - localStorageの値がJSON形式（配列・オブジェクト）なら既存の`read()`/`write()`ヘルパーを使う。
   - 値が生の文字列・数値（JSON化されていない、例: `'0'`/`'1'`や`'dark'`のような単純な文字列）の場合は`readRaw()`/`writeRaw()`ヘルパーを使う（`JSON.parse`に通すとエラーになるため）。
   - `js/backup.js`の`restoreFromBackupPayload()`にも、手動バックアップからの復元で同じ項目を復元する処理を追加する。
+
+# アーキテクチャ概要
+
+このアプリは**ローカルファースト**のPWA（GitHub Pagesでホストする静的サイト）。
+
+- **ローカルストレージが正**：全データ（論証・学習記録・設定など）は各端末の`localStorage`に保存される。オフラインでも全機能が動くことを最優先する設計。ネットワーク・クラウド同期・ログインが一切使えなくても、その端末に保存済みのデータは問題なく見られる・編集できる。
+- **クラウド同期は「複数端末間でデータを揃えるための付加機能」**であり、ローカルの動作を妨げてはいけない。同期に失敗しても、ローカルの保存・表示は常に正常に続行できること。
+- 主要ファイル：
+  - `index.html` … 全ページのマークアップ（タブ切り替えのSPA）
+  - `js/core.js` … 論証データの中核ロジック（entries/studyLogの読み書き・レンダリング）
+  - `js/*.js` … 機能ごとに分割（問題演習・読み上げ・過去問ログ・判例・重複チェック・バックアップ等）
+  - `drive-sync.js` … クラウド同期＋認証まわり全部（後述）
+  - `sw.js` … Service Worker（オフラインキャッシュ）
+  - `manifest.json` … PWAのホーム画面追加用設定
+  - `tools/sync-test/run.js` … 同期ロジックの自動テスト（Node、Apps Scriptの実物無しで検証できるモック環境）
+  - `tools/gas-backup/code.gs` … クラウド同期用Google Apps Script（GAS）の**参照用コピー**（後述、重要）
+
+# クラウド同期の仕組み（drive-sync.js）
+
+- 同期用バックエンドは、Google Apps Script（GAS）のウェブアプリ（`drive-sync.js`内の`SYNC_URL`）。GETで現在の全データ(JSON)を取得、POSTでrevision番号ベースの楽観ロックにより丸ごと上書き保存する。マージ・競合解決はすべてクライアント側（`drive-sync.js`）で行う。
+- 同期ロジックの設計思想：「クラウドを唯一の正本とし、片方の端末だけが変わっていれば丸ごと採用、両方が変わっていれば確認ポップアップでユーザーに選んでもらう」方式（マージはしない）。
+- **クラウド側が意図せず空・激減した場合に、確認なしで上書きしてしまわないための安全装置**（`isSuspiciousDataLoss`）が入っている。過去に実際にこれが原因でデータ消失事故が起きたことがある（詳細は本ファイル末尾の「経緯」参照）。この安全装置は削除・弱体化しないこと。
+- 同期成功のたびに、Googleドライブの`ronsho-app-backups`フォルダにも自動でバックアップファイルを保存する（`maybeAutoBackupToDrive`、最短15分間隔）。同期用ファイル自体のGoogleドライブ「バージョン履歴」はGoogle側の都合で間引かれ当てにできないため、この自動バックアップが実質的な世代管理になっている。
+- 自動テストは `node tools/sync-test/run.js` で実行できる（Apps Scriptの実物無しでモックを使って検証）。**同期ロジックを変更したら必ずこれを実行し、全チェック合格を確認すること。**
+
+# Googleアカウント認証（重要・経緯あり）
+
+同期用のGAS URLは、公開リポジトリ・公開GitHub Pagesのソースから誰でも読める場所にあるため、**認証なしではURLを知っている第三者が全データを読み書きできてしまう**。これを防ぐため、Googleアカウントでのログインを必須にしている（許可した特定のメールアドレスのみアクセス可）。
+
+## 現在の実装方式：OAuth 2.0 認可コードフロー（ページ遷移方式）
+
+以下の方式を順番に試し、いずれも実機で失敗したため、最終的に「ページ全体をGoogleのログイン画面へ遷移させ、認可コード(`code`)をURLのクエリ文字列で受け取り、GAS側でアクセストークンに交換する」という、最も枯れた方式に落ち着いた。**今後この認証部分を変更する場合は、必ずこの経緯を踏まえること（同じ失敗を繰り返さないため）。**
+
+1. **`google.accounts.oauth2.initTokenClient()`のポップアップ方式** → GitHub Pagesが送る`Cross-Origin-Opener-Policy`ヘッダーにより、ポップアップの`window.closed`監視がブラウザにブロックされ、ログイン自体は完了してもアプリ側が検知できず固まる。GitHub Pagesは静的ホスティングのためこのレスポンスヘッダーを変更できない。
+2. **`google.accounts.id`（公式の「Googleでログイン」ボタン、FedCM/ID連携方式）** → 同じくCOOPが内部のpostMessage通信をブロックし、失敗。
+3. **OAuth 2.0 Implicit Grant（`response_type=token`、ページ遷移方式）** → COOPの影響は受けなくなったが、**Google側のポリシーでこの方式自体が拒否される**（「このアプリはGoogleのOAuth 2.0ポリシーを遵守していない」）。近年Googleは素のImplicit Grantを制限する方向にあるため。
+4. **OAuth 2.0 認可コードフロー（`response_type=code`、ページ遷移方式）** → ✅ 現在の実装。ポップアップ・iframeを一切使わないためCOOPの影響を受けず、Googleのポリシー制限も受けない。
+
+### 実装の要点（`drive-sync.js`）
+
+- `buildAuthRedirectUrl()` / `authRedirectUri()`：Googleのログイン画面へのURLを組み立てる。**`authRedirectUri()`は固定文字列`'https://blackout0802.github.io/ronsho-app/'`を返す**（`window.location`から動的に組み立てない）。理由：`manifest.json`の`start_url`が`./index.html`のため、ホーム画面に追加したPWAから開くと`window.location.pathname`が`/ronsho-app/index.html`になり、通常ブラウザの`/ronsho-app/`と食い違って`redirect_uri_mismatch`エラーになるため。
+- `URLSearchParams`は使わない（Safari実機で`The string did not match the expected pattern.`という互換性エラーが発生したため）。クエリ文字列の組み立て・分解は手書きの文字列処理で行う。
+- `consumeAuthRedirectCode()`：ページ読み込み時、URLの`?code=...`を読み取る。**読み取りより先にURLから消す**（`history.replaceState`）。解析に失敗しても認可コードがURLに残り続けて開くたびに同じ処理を繰り返さないため。
+- 認可コードはクライアントからGAS側に送り、**GAS側でのみ**Googleのトークンエンドポイントに対しクライアントシークレットを使ってアクセストークンに交換する（`handleCodeExchange`、GAS側）。クライアントシークレットは絶対にリポジトリに含めない（後述）。
+- ログイン待ちの間、バックグラウンドの保険的なポーリング（`maybePullIfIdle`等）が無言のログイン再試行を繰り返さないよう、`authGateActive`フラグで抑制している（これが無いと、ポップアップブロック等の問題が悪化する）。
+
+## サーバー側（GAS）の認証
+
+- `isAuthorized(token)`：受け取ったアクセストークンをGoogleの`tokeninfo`エンドポイントに問い合わせ、`aud`（クライアントID一致）・`email_verified`・許可メールアドレスリスト（`ALLOWED_EMAILS`）を確認する。
+- `doGet`・`doPost`は、想定外の例外が起きても**必ずJSONを返す**ようtry/catchで包んである（`{ok:false, reason:'server_error', message:...}`）。理由：Apps Script側で例外が起きると、JSONの代わりにGoogleの汎用エラーページ(HTML)が返り、それにはCORS用ヘッダーが無いため、ブラウザ側で「CORSポリシーによってブロックされました」という原因の分かりにくいエラーになる。この仕組みは削除しないこと。
+
+# GAS（Google Apps Script）の反映について【最重要・見落としやすい】
+
+`tools/gas-backup/code.gs`は**参照用のコピーにすぎず、実際にデプロイされているコードはGoogle Apps Scriptエディタ側にある**。このファイルをリポジトリに書いてpushしても、**サーバー側の挙動は一切変わらない**。
+
+`drive-sync.js`側の変更だけで完結するタスクなら気にする必要はないが、**`tools/gas-backup/code.gs`を変更した場合は、必ずユーザーに次を案内すること**：
+
+1. Google Apps Scriptエディタ（プロジェクト名「論証集アプリ同期」）を開く
+2. `コード.gs`の中身を、更新後の`tools/gas-backup/code.gs`の内容に置き換える（全文コピペが確実）
+3. 保存
+4. 「デプロイ」→「デプロイを管理」→ 既存デプロイの鉛筆マーク（編集）→「バージョン」で「新しいバージョン」を選択 →「デプロイ」（**「新しいデプロイ」ではなく既存デプロイの編集**を選ぶこと。新規デプロイを作るとURLが変わり、アプリ側の設定変更が必要になってしまう）
+
+## クライアントシークレットについて
+
+- Google CloudのOAuthクライアントの「クライアント シークレット」は、**このリポジトリのどのファイルにも絶対に書かないこと**（コミットしない）。
+- GAS側で、Apps Scriptエディタの ⚙️「プロジェクトの設定」→「スクリプト プロパティ」に、プロパティ名`CLIENT_SECRET`として保存されている。`handleCodeExchange()`がここから読み出す。
+- `AUTH_CLIENT_ID`（OAuthクライアントID）は非公開情報ではないため、`drive-sync.js`・`tools/gas-backup/code.gs`の両方にハードコードしてよい。両者は必ず同じ値にすること。
+
+## Google Cloud Console側の設定（既に完了済み・通常は変更不要）
+
+OAuthクライアント（`1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com`）に、以下が登録済み：
+- 承認済みのJavaScript生成元：`https://blackout0802.github.io`
+- 承認済みのリダイレクトURI：`https://blackout0802.github.io/ronsho-app/`
+
+アプリのURL自体を変更しない限り、これらの再設定は不要。
+
+## 許可アカウント
+
+`drive-sync.js`の`AUTH_CLIENT_ID`と`tools/gas-backup/code.gs`の`ALLOWED_EMAILS`に、ログインを許可する2つのメールアドレスが列挙されている（`black.out0706@gmail.com`, `munenori.ishikawa@skym.co.jp`）。許可アカウントを増減する場合は、GAS側の`ALLOWED_EMAILS`を編集し、上記の手順でデプロイし直す必要がある（これも`code.gs`のみの変更なので、GASへの手動反映が必要）。
+
+## GAS側の権限承認（新しい外部通信を追加した場合の注意）
+
+GASのコードに、今まで使っていなかった種類のAPI（例：新しい外部ドメインへの`UrlFetchApp.fetch`）を追加すると、コードを反映してデプロイし直すだけでは動かない。**スクリプトの所有者が一度手動で権限を承認する必要がある**（自動では行われない）。
+
+承認済みかどうか不明な変更をした場合は、ユーザーに次を案内する：
+1. Apps Scriptエディタで、その新しいAPIを実際に呼び出す簡単なテスト関数を一時的に追加する（例: `function testAuth(){ UrlFetchApp.fetch('https://www.google.com'); }`）
+2. 関数選択ドロップダウンでその関数を選び、▷実行
+3. 「承認が必要です」ダイアログが出たら、権限を確認→アカウント選択→（未確認アプリの警告が出たら）詳細→安全でないページに移動→許可
+4. テスト関数は不要になったら削除してよい
+
+（このダイアログはブラウザのポップアップブロックの影響を受けることがある。出ない場合はアドレスバーのブロック通知アイコンを確認する。）
+
+# デバッグ時の勘所
+
+- 実機（特にモバイル）での不具合報告は、可能な限り**ブラウザの開発者ツールのConsole/Networkタブの実際の内容**（エラーメッセージ全文、レスポンスのJSON、ステータスコード）を確認してから対応すること。憶測での複数回の修正は手戻りが大きい。
+- GASの実行ログ（Apps Scriptエディタ左メニューの「実行数」）で、直近の`doGet`/`doPost`の成否・エラー内容を確認できる。ただし「失敗しました」ではなく「完了」と出ていても、**中身のJSONが`{ok:false, ...}`という「アプリケーションレベルの失敗」であることがある**（例外は起きていないが処理は失敗、というケース）ため、実行ログのステータスだけで判断しないこと。
+- iOSでホーム画面に追加したPWAは、通常のブラウザ（Safari/Chrome）とは**別の独立したlocalStorage領域**を持つ。データが「消えた」ように見えても、実際は別の保存領域を見ているだけのことが多い（クラウド同期・再ログインで復旧できる）。
+- GitHub PagesおよびService Workerのキャッシュは、デプロイ直後は反映まで数分かかることがある。「デプロイしたのに直らない」という報告を受けたら、まずバージョン番号（`index.html`のh1表示）が最新になっているか確認する。
