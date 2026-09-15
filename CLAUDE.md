@@ -88,7 +88,7 @@ OAuthクライアント（`1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.g
 
 ## 許可アカウント
 
-`drive-sync.js`の`AUTH_CLIENT_ID`と`tools/gas-backup/code.gs`の`ALLOWED_EMAILS`に、ログインを許可する2つのメールアドレスが列挙されている（`black.out0706@gmail.com`, `munenori.ishikawa@skym.co.jp`）。許可アカウントを増減する場合は、GAS側の`ALLOWED_EMAILS`を編集し、上記の手順でデプロイし直す必要がある（これも`code.gs`のみの変更なので、GASへの手動反映が必要）。
+ログイン許可アカウントはリポジトリに書かず、GASのスクリプト プロパティ `ALLOWED_EMAILS`（カンマ区切り）で管理する。許可アカウントを増減する場合はGAS側のプロパティ値を編集すればよく、コード変更・再デプロイは不要。なお2026-09-15より前の版では `tools/gas-backup/code.gs` に2件のメアド直書きがあったが、秘匿化のため削除済み。
 
 ## GAS側の権限承認（新しい外部通信を追加した場合の注意）
 

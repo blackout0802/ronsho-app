@@ -612,7 +612,7 @@ function isTitleLine(runList) {
 }
 const SECTION_STOP_WORDS = ['サブ', '今後追加', '暗記'];
 function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function buildBodyHtml(bodyRunLines) {
   return bodyRunLines.map(runList => {

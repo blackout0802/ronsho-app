@@ -28,14 +28,23 @@ const BACKUP_KEEP_COUNT = 200;
 // Googleに問い合わせて実在の・有効なものか確認したうえで、許可したメール
 // アドレスと一致する場合だけリクエストを受け付ける。
 // AUTH_CLIENT_IDはdrive-sync.js側の値と必ず一致させること（非公開情報ではないので
-// ここに書いても問題ない）。ALLOWED_EMAILSにこのアプリの利用を許可する
-// Googleアカウントのメールアドレスを列挙する。
+// ここに書いても問題ない）。利用を許可するGoogleアカウントのメールアドレスは
+// 公開リポジトリに書かず、GASエディタの「プロジェクトの設定」(⚙️)→「スクリプト プロパティ」で、
+// プロパティ名 ALLOWED_EMAILS・値はカンマ区切り（例: a@example.com,b@example.com）で登録して使う。
 // CLIENT_SECRETは絶対にこのファイル（公開リポジトリ）に書かないこと。
 // GASエディタの「プロジェクトの設定」(⚙️)→「スクリプト プロパティ」で、
 // プロパティ名 CLIENT_SECRET・値はGoogle Cloud Consoleの同じOAuthクライアントの
 // ページに表示されている「クライアント シークレット」を登録して使う
 const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
-const ALLOWED_EMAILS = ['black.out0706@gmail.com', 'munenori.ishikawa@skym.co.jp'];
+
+function getAllowedEmails() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('ALLOWED_EMAILS') || '';
+    return raw.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return !!s; });
+  } catch (e) {
+    return [];
+  }
+}
 
 function isAuthorized(token) {
   if (!token) return false;
@@ -50,7 +59,7 @@ function isAuthorized(token) {
     // 同じGoogleアカウントの別アプリ向けトークンを誤って受け付けてしまいかねない
     if (info.aud !== AUTH_CLIENT_ID) return false;
     if (!info.email || info.email_verified !== 'true') return false;
-    return ALLOWED_EMAILS.indexOf(info.email) !== -1;
+    return getAllowedEmails().indexOf(info.email) !== -1;
   } catch (e) {
     return false;
   }
