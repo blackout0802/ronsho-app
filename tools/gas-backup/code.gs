@@ -137,14 +137,30 @@ function pruneOldBackups(folder) {
 }
 
 function doGet(e) {
-  const token = e && e.parameter && e.parameter.token;
-  if (!isAuthorized(token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
-  const file = getOrCreateFile();
-  const text = file.getBlob().getDataAsString() || '{"revision":0,"data":{}}';
-  return jsonResponse(JSON.parse(text));
+  try {
+    const token = e && e.parameter && e.parameter.token;
+    if (!isAuthorized(token)) return jsonResponse({ ok: false, reason: 'unauthorized' });
+    const file = getOrCreateFile();
+    const text = file.getBlob().getDataAsString() || '{"revision":0,"data":{}}';
+    return jsonResponse(JSON.parse(text));
+  } catch (err) {
+    return jsonResponse({ ok: false, reason: 'server_error', message: String(err && err.message || err) });
+  }
 }
 
 function doPost(e) {
+  // ここで想定外の例外が発生すると、Apps ScriptはJSONの代わりに独自の
+  // エラーページ(HTML)を返してしまい、それにはCORS用のヘッダーが無いため、
+  // ブラウザ側で「CORSポリシーによってブロックされました」という分かりにくい
+  // エラーになる。原因を特定しやすくするため、必ずJSONで返すようにする
+  try {
+    return doPostInner(e);
+  } catch (err) {
+    return jsonResponse({ ok: false, reason: 'server_error', message: String(err && err.message || err) });
+  }
+}
+
+function doPostInner(e) {
   const request = JSON.parse(e.postData.contents);
   if (request.action === 'exchange_code') {
     // この時点ではまだトークンを持っていない（これから取得する）ため、
