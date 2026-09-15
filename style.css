@@ -886,8 +886,8 @@ mark.searchHit { background: #fff176; color: #4a3c00; border-radius: 2px; paddin
 .confBtn.confBad.active { background: #ef4444; color: #fff; }
 
 /* --- 苦手フラグ --- */
-.titleCellWrap { display: flex; flex-direction: column; gap: 4px; }
-.titleIconsRow { display: flex; align-items: center; gap: 6px; }
+.titleCellWrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.titleIconsRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; }
 .starToggle { cursor: pointer; font-size: 15px; flex-shrink: 0; opacity: 0.3; transition: opacity 0.15s ease, transform 0.15s ease; }
 .starToggle:hover { opacity: 0.7; transform: scale(1.2); }
 .starToggle.active { opacity: 1; }
@@ -983,6 +983,12 @@ mark.searchHit { background: #fff176; color: #4a3c00; border-radius: 2px; paddin
 @media (max-width: 720px) {
   .compareModalBody { grid-template-columns: 1fr; }
 }
+/* タブレット幅ではタイトル列が狭くなるため、操作アイコンを縮小してはみ出しを防ぐ */
+@media (max-width: 1024px) {
+  .titleIconsRow { gap: 4px; }
+  .starToggle, .bookmarkToggle, .memoToggle, .skipToggle, .editToggle,
+  .compareToggle, .deleteToggle, .importedAtIcon { font-size: 13px; }
+}
 .driveSyncConflictOverlay {
   position: fixed;
   inset: 0;
@@ -1072,7 +1078,7 @@ mark.searchHit { background: #fff176; color: #4a3c00; border-radius: 2px; paddin
 .driveSyncConflictLaterBtn:hover { color: var(--text); }
 .subjectCell { cursor: pointer; }
 .subjectCell:hover { background: var(--tint-1); }
-.titleText { flex: 1; }
+.titleText { flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .editTitleInput { width: 100%; font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-strong); box-sizing: border-box; margin-bottom: 6px; }
 .editBodyWrap { display: flex; flex-direction: column; gap: 6px; }
 .editColorToolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
