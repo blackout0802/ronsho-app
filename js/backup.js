@@ -154,6 +154,7 @@ function restoreFromBackupPayload(data) {
   });
   if (data.quizDefaultFilters && typeof data.quizDefaultFilters === 'object') localStorage.setItem('ronshoQuizDefaultFiltersV1', JSON.stringify(data.quizDefaultFilters));
   if (data.tabShortcuts && typeof data.tabShortcuts === 'object') localStorage.setItem('ronshoTabShortcutsV1', JSON.stringify(data.tabShortcuts));
+  if (Array.isArray(data.syncConflicts)) localStorage.setItem('ronshoSyncConflictsV1', JSON.stringify(data.syncConflicts));
   if (entries.length > 0) {
     downloadBtn.style.display = 'inline-block';
     downloadLogBtn.style.display = 'inline-block';

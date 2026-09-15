@@ -29,6 +29,9 @@
   const XP_KEY = 'ronshoXpV1';
   const ORPHANENTRYARCHIVE_KEY = 'ronshoOrphanEntryArchiveV1';
   const PRECEDENT_KEY = 'ronshoPrecedentsV1';
+  // 編集競合でマージした論証タイトルの記録。バナー→重複チェックで確認する
+  // ためのもので、他端末でも同じバナーが出るよう同期対象に含める
+  const SYNC_CONFLICTS_KEY = 'ronshoSyncConflictsV1';
   // 以下は各画面（テーマ・ペット・問題演習/読み上げ/苦手フィルタ/過去問ログの
   // 既定値・ショートカット・バックアップ催促）の「この端末だけのローカル設定」
   // だったものを、同期対象に加えたキー群。値の形式は元のファイルにそのまま
@@ -81,7 +84,8 @@
     backupReminderDays: '📦 バックアップ催促の間隔',
     lastBackupAt: '📦 最終バックアップ日',
     backupSnoozeAt: '📦 バックアップ催促のスヌーズ状態',
-    progressViewMode: '📚 科目別暗記完了率の表示切替'
+    progressViewMode: '📚 科目別暗記完了率の表示切替',
+    syncConflicts: '⚠️ 同期の編集競合リスト'
   };
 
   let revision = Number(localStorage.getItem(REVISION_KEY) || 0);
@@ -135,7 +139,7 @@
   const state = t => { const e = document.getElementById('driveSyncState'); if (e) e.textContent = t };
 
   const snapshot = () => ({
-    schemaVersion: 7,
+    schemaVersion: 8,
     entries: getEntries(),
     studyLog: read(STUDYLOG_KEY, {}),
     manualLog: read(MANUALLOG_KEY, {}),
@@ -165,7 +169,8 @@
     backupReminderDays: readRaw(BACKUP_REMINDER_DAYS_KEY, ''),
     lastBackupAt: readRaw(BACKUP_LAST_AT_KEY, ''),
     backupSnoozeAt: readRaw(BACKUP_SNOOZE_AT_KEY, ''),
-    progressViewMode: readRaw(PROGRESS_VIEW_MODE_KEY, '')
+    progressViewMode: readRaw(PROGRESS_VIEW_MODE_KEY, ''),
+    syncConflicts: read(SYNC_CONFLICTS_KEY, [])
   });
 
   const hasLocalData = () => {
@@ -239,6 +244,7 @@
       writeRaw(BACKUP_LAST_AT_KEY, data.lastBackupAt);
       writeRaw(BACKUP_SNOOZE_AT_KEY, data.backupSnoozeAt);
       writeRaw(PROGRESS_VIEW_MODE_KEY, data.progressViewMode);
+      write(SYNC_CONFLICTS_KEY, data.syncConflicts || []);
       // テーマ・ペットは、専用の公開APIがあれば呼んで見た目にもすぐ反映する。
       // それ以外の設定（既定フィルタ等）は、次にその画面を開いたときに
       // 反映される（他の同期項目と同様、都度の即時反映までは行わない）
@@ -268,6 +274,7 @@
       if (typeof renderSpeechDictList === 'function') renderSpeechDictList();
       if (typeof renderOrphanedStudyLog === 'function') renderOrphanedStudyLog();
       if (typeof renderPrecedentPage === 'function') renderPrecedentPage();
+      if (typeof renderSyncConflictBanner === 'function') renderSyncConflictBanner();
     } finally {
       applyingRemoteData = false;
     }
@@ -511,6 +518,11 @@
       confirmBtn.textContent = '⏳ マージ中…';
       const merged = buildManualMergeSnapshot(diff, localData, remoteData, selections, otherFieldsSide);
       await resolveConflictManualMerge(merged, remoteRevision);
+      if (!isConflictModalOpen()) {
+        // マージ成功時は、内容が食い違っていた論証を記録してバナーで案内する
+        const edited = diff.groups.find(g => g.kind === 'edited');
+        recordSyncConflicts(edited ? edited.titles : []);
+      }
       if (isConflictModalOpen()) {
         confirmBtn.disabled = false;
         confirmBtn.textContent = '✅ 選んだ内容でマージする';
@@ -627,6 +639,18 @@
     Object.keys(OTHER_FIELD_LABELS).forEach(k => { merged[k] = otherBase[k]; });
     return merged;
   }
+  // 編集競合でマージした論証タイトルを記録する。バナー→重複チェックで
+  // 確認してもらうためのもので、記録自体も同期対象（次の同期で他端末へ伝わる）。
+  // 適用中（applyRemoteData）の受け流しと区別するため、ここでは変更フックで
+  // 即キューする
+  const recordSyncConflicts = (titles) => {
+    if (!titles || !titles.length) return;
+    const cur = read(SYNC_CONFLICTS_KEY, []);
+    const merged = [...new Set([...(Array.isArray(cur) ? cur : []), ...titles])];
+    write(SYNC_CONFLICTS_KEY, merged);
+    if (typeof renderSyncConflictBanner === 'function') renderSyncConflictBanner();
+    queue();
+  };
   async function resolveConflictManualMerge(mergedData, remoteRevision) {
     try {
       // 選択の間に更に更新されている可能性があるため、最新のrevisionを取り直してから保存する
@@ -683,6 +707,8 @@
         localStorage.setItem(REVISION_KEY, String(revision));
         applyRemoteData(merged);
         markSynced(merged);
+        const editedGroup = diff.groups.find(g => g.kind === 'edited');
+        recordSyncConflicts(editedGroup ? editedGroup.titles : []);
         state('📖 学習中のため、この端末の学習記録を優先して自動的に同期しました（' + new Date().toLocaleTimeString() + '）');
         return;
       }
@@ -840,7 +866,7 @@
       el = document.createElement('div');
       el.id = 'driveAuthGate';
       el.className = 'driveSyncPanel';
-      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です '
+      el.innerHTML = '🔒 '
         + '<button id="driveAuthLoginBtn" type="button">Googleでログイン</button>';
       const slot = document.getElementById('driveSyncPanelSlot');
       const row = document.getElementById('topStatusRow');
@@ -867,7 +893,7 @@
     const cached = loadAuthToken();
     if (cached) return cached;
     showAuthGate();
-    throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Googleでログイン」ボタンから操作してください');
+    throw makeAuthError('未ログインのため同期していません');
   }
   function isUnauthorizedBody(body) {
     return !!(body && body.ok === false && body.reason === 'unauthorized');

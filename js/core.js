@@ -1139,7 +1139,12 @@ function highlightSearch(html, query) {
   if (!query) return html;
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp('(' + escapedQuery + ')', 'ig');
-  return html.replace(re, '<mark class="searchHit">$1</mark>');
+  // タグ内（<...>）や文字参照（&lt;等）の中に<mark>を挿入すると
+  // マークアップが壊れるため、テキスト部分だけに適用する
+  return String(html).split(/(<[^>]*>|&[A-Za-z0-9#]+;)/g).map(function (part, i) {
+    if (i % 2 === 1) return part;
+    return part.replace(re, '<mark class="searchHit">$1</mark>');
+  }).join('');
 }
 function renderAll(preserveQuiz) {
   renderSubjectTabs();

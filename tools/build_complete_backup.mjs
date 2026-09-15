@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-const source='legacy:ronsho_app_v18.7_with_past_exam_log_v2.html';
+const source='legacy-ronsho_app_v18.7_with_past_exam_log_v2.html';
 const output='dist/ronsho_app_v18.7_complete_backup.html';
 let html=fs.readFileSync(source,'utf8');
 const injected=`

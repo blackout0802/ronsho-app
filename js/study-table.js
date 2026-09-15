@@ -1052,6 +1052,7 @@ document.addEventListener('click', (e) => {
   }
   const syncConflictDismissBtn = e.target.closest('#syncConflictDismissBtn');
   if (syncConflictDismissBtn) {
+    if (typeof window.ronshoClearSyncConflicts === 'function') window.ronshoClearSyncConflicts();
     const banner = document.getElementById('syncConflictBanner');
     if (banner) { banner.innerHTML = ''; banner.classList.remove('visible'); }
     return;

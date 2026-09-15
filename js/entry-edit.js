@@ -78,6 +78,12 @@ function buildEntryTagsBlockHtml(e) {
   return html;
 }
 const SYNC_CONFLICT_KEY = 'ronshoSyncConflictsV1';
+// 確認済みにしてバナーを消す。キー自体を消すため、同期で他端末にも伝わる
+window.ronshoClearSyncConflicts = () => {
+  localStorage.removeItem(SYNC_CONFLICT_KEY);
+  if (window.ronshoSyncNotifyChange) window.ronshoSyncNotifyChange();
+  renderSyncConflictBanner();
+};
 function renderSyncConflictBanner() {
   const banner = document.getElementById('syncConflictBanner');
   if (!banner) return;
@@ -89,7 +95,7 @@ function renderSyncConflictBanner() {
     return;
   }
   banner.classList.add('visible');
-  banner.innerHTML = '⚠️ 他端末との同期で <strong>' + conflicts.length + '件</strong> の論証が編集競合しています（同じタイトルで内容が異なる論証が両方残っています）。'
+  banner.innerHTML = '⚠️ 同期の編集競合をマージしました（<strong>' + conflicts.length + '件</strong>）。内容を確認する場合は重複チェックへ '
     + '<button type="button" id="syncConflictResolveBtn">🔍 重複チェックで確認する</button>'
     + '<span class="syncConflictDismissBtn" id="syncConflictDismissBtn">✖</span>';
 }
