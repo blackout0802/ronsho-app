@@ -739,16 +739,20 @@
   // google.accounts.id（公式の「Googleでログイン」ボタン）を試したが、
   // いずれもGitHub Pagesが送るCross-Origin-Opener-Policyヘッダーにより、
   // ポップアップ・iframeとページの間のwindow.closed／postMessageによる通信が
-  // ブロックされ、ログイン自体はGoogle側で完了してもアプリ側がそれを検知できない
-  // 不具合が実機で確認された。GitHub Pagesは静的ホスティングのためこの
-  // レスポンスヘッダー自体を変更できない。
-  // そのため、ポップアップやiframeを一切使わない、最も基本的な
-  // 「ページ全体をGoogleのログイン画面へ移動し、ログイン後にこのアプリの
-  // URLへ戻ってくる」方式（OAuth 2.0 Implicit Grant、ページ遷移のみで完結し
-  // COOPの影響を受けない）に切り替えている。
+  // ブロックされる不具合が実機で確認された。次にページ全体を移動する
+  // OAuth 2.0 Implicit Grant(response_type=token)を試したが、今度はGoogle側の
+  // ポリシーでこの方式自体が拒否された（「このアプリはGoogleのOAuth 2.0
+  // ポリシーを遵守していない」というエラー。Googleは近年、素のImplicit Grantを
+  // 制限する方向にある）。
+  // 最終的に、最も標準的で制限を受けない「認可コードフロー」
+  // (response_type=code)に切り替えている。ページ全体をGoogleのログイン画面へ
+  // 移動し（ポップアップ・iframe不使用でCOOPの影響を受けない）、戻ってきた時に
+  // URLに付く認可コードをGAS側に送り、GAS側でGoogleのトークンエンドポイントに
+  // 対しクライアントシークレット（GASのスクリプトプロパティにのみ保存。この
+  // 公開リポジトリには絶対に書かない）を使ってトークンに交換してもらう。
   // ※この方式を使うには、Google Cloud Console側のOAuthクライアント設定で、
-  // 「承認済みのリダイレクトURI」にこのアプリのURLを追加登録する必要がある
-  // （「承認済みのJavaScript生成元」とは別の欄）
+  // 「承認済みのリダイレクトURI」にこのアプリのURLを登録する必要がある
+  // （Implicit Grantの時と同じ欄・同じ値でよい）
   let authGateActive = false;
   function authRedirectUri() {
     return window.location.origin + window.location.pathname;
@@ -757,32 +761,54 @@
     const params = new URLSearchParams({
       client_id: AUTH_CLIENT_ID,
       redirect_uri: authRedirectUri(),
-      response_type: 'token',
+      response_type: 'code',
       scope: 'https://www.googleapis.com/auth/userinfo.email',
+      access_type: 'online',
       prompt: 'select_account'
     });
     return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
   }
   // ページ読み込み時に、Googleのログイン画面から戻ってきた直後かどうかを
-  // URLの#以降（フラグメント）から判定する。トークンをURLに残したままにしない
-  // よう、読み取り後は必ずURLから消す
-  function consumeAuthRedirectResult() {
+  // URLの?以降（クエリ文字列。認可コードフローではフラグメントではなくこちらに付く）
+  // から判定する。コードをURLに残したままにしないよう、読み取り後は必ずURLから消す
+  function consumeAuthRedirectCode() {
     // 自動テスト(tools/sync-test)の簡易サンドボックスにはlocation/historyが
     // 無いため、無ければ何もせず素通りする
-    if (typeof window === 'undefined' || !window.location) return false;
-    const hash = window.location.hash;
-    if (!hash || hash.indexOf('access_token=') === -1) return false;
-    const params = new URLSearchParams(hash.replace(/^#/, ''));
-    const token = params.get('access_token');
-    const expiresIn = params.get('expires_in');
+    if (typeof window === 'undefined' || !window.location) return null;
+    const search = window.location.search;
+    if (!search || search.indexOf('code=') === -1) return null;
+    const params = new URLSearchParams(search.replace(/^\?/, ''));
+    const code = params.get('code');
     const error = params.get('error');
     if (typeof history !== 'undefined' && history.replaceState) {
-      history.replaceState(null, '', window.location.pathname + window.location.search);
+      history.replaceState(null, '', window.location.pathname);
     }
-    if (error || !token) return false;
-    saveAuthToken(token, expiresIn);
-    return true;
+    if (error || !code) return null;
+    return code;
   }
+  // 受け取った認可コードをGAS側に送り、トークンに交換してもらう
+  async function exchangeAuthCode(code) {
+    const r = await fetch(SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'exchange_code', code: code, redirect_uri: authRedirectUri() })
+    });
+    const body = await r.json();
+    if (!body || !body.ok || !body.token) throw new Error('ログイン処理に失敗しました');
+    saveAuthToken(body.token, body.expires_in);
+  }
+  // ページ読み込み時、Googleのログイン画面から戻ってきた直後であれば、
+  // 他の処理より先に認可コードをトークンに交換しておく
+  const initialAuthReady = (async () => {
+    const code = consumeAuthRedirectCode();
+    if (!code) return;
+    try {
+      await exchangeAuthCode(code);
+    } catch (e) {
+      // 失敗しても致命的ではない。この後ensureAuthToken()が改めてログイン
+      // 案内を表示するので、ここでは何もしない
+    }
+  })();
   function showAuthGate() {
     authGateActive = true;
     let el = document.getElementById('driveAuthGate');
@@ -1042,10 +1068,6 @@
     markSynced
   };
 
-  // Googleのログイン画面からページ全体が戻ってきた直後の可能性があるため、
-  // 他の処理より先にURLのフラグメントからトークンを回収しておく
-  consumeAuthRedirectResult();
-
   window.addEventListener('load', () => {
     const old = document.getElementById('driveSyncPanel');
     if (old) old.remove();
@@ -1062,9 +1084,13 @@
       syncNow().catch(e => state(isOfflineError(e) ? '📴 オフラインです（変更はこの端末に保存されています）' : e.message));
     };
 
-    pullFromCloud(true).catch(e => {
-      if (e && e.isAuthError) { state('🔒 ' + e.message); return; }
-      state(isOfflineError(e) ? '📴 オフラインで起動しました（この端末のデータで動作します。オンラインになると自動的に同期します）' : 'オフラインで動作中（' + e.message + '）');
+    // Googleのログイン画面からページ全体が戻ってきた直後の可能性があるため、
+    // 認可コードのトークン交換（もしあれば）が終わってから同期を試みる
+    initialAuthReady.then(() => {
+      pullFromCloud(true).catch(e => {
+        if (e && e.isAuthError) { state('🔒 ' + e.message); return; }
+        state(isOfflineError(e) ? '📴 オフラインで起動しました（この端末のデータで動作します。オンラインになると自動的に同期します）' : 'オフラインで動作中（' + e.message + '）');
+      });
     });
 
     // オンラインに復帰した瞬間に、保険のポーリング（最大10秒）を待たず
