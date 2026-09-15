@@ -2,15 +2,16 @@
   const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyB-3irASAEN6amf2QIN74WQNhF4winF8LwO_gfYDFkW4JLw0cTHTUyOHfoPis7Sof5/exec';
   // 同期用URLは公開リポジトリ・公開ページのソースから誰でも読める場所にあるため、
   // URLさえ知っていれば誰でも全データの閲覧・書き換えができてしまわないよう、
-  // Googleアカウントでのログインを必須にしている。クライアント側は「Googleで
-  // ログイン」ボタン（google.accounts.id）でIDトークン(JWT)を取得してGAS側に
-  // 送るだけで、実際に「誰か」の確認（許可したメールアドレスかどうか）はGAS側
-  // （tools/gas-backup/code.gs）がGoogleに問い合わせて行う。CLIENT_IDは非公開
-  // 情報ではない（クライアント側コードに含めて問題ない）が、Google Cloud
-  // Console側でこのアプリのURL（https://blackout0802.github.io）が
-  // 「承認済みのJavaScript生成元」に登録されている必要がある
+  // Googleアカウントでのログインを必須にしている。クライアント側はページ全体を
+  // Googleのログイン画面へ移動し（OAuth 2.0 Implicit Grant）、戻ってきた時に
+  // URLに付くアクセストークンをGAS側に送るだけで、実際に「誰か」の確認
+  // （許可したメールアドレスかどうか）はGAS側（tools/gas-backup/code.gs）が
+  // Googleに問い合わせて行う。CLIENT_IDは非公開情報ではない（クライアント側
+  // コードに含めて問題ない）が、Google Cloud Console側でこのアプリのURL
+  // （https://blackout0802.github.io/ronsho-app/）が「承認済みのJavaScript
+  // 生成元」と「承認済みのリダイレクトURI」の両方に登録されている必要がある
   const AUTH_CLIENT_ID = '1008108195377-3i95ujevlk1keuf02tcitnuikniie9al.apps.googleusercontent.com';
-  // ログインして得たIDトークンの保存先。端末ごとのログイン状態であり、
+  // ログインして得たアクセストークンの保存先。端末ごとのログイン状態であり、
   // 他端末と揃える意味が無いため同期対象には含めない
   const AUTH_TOKEN_KEY = 'ronshoAuthTokenV1';
   const REVISION_KEY = 'ronshoSyncRevisionV1';
@@ -734,55 +735,53 @@
     e.isAuthError = true;
     return e;
   }
-  // 当初はgoogle.accounts.oauth2.initTokenClient()のポップアップ方式で実装していたが、
-  // GitHub Pagesが送るCross-Origin-Opener-Policyヘッダーにより、ポップアップの
-  // window.closed監視がブラウザにブロックされ、ログイン自体は完了してもアプリ側が
-  // それを検知できず「ログイン中…」のまま固まる不具合が実機で確認された
-  // （コンソールに "Cross-Origin-Opener-Policy policy would block the
-  // window.closed call" と出る）。GitHub Pagesは静的ホスティングのためこの
-  // レスポンスヘッダー自体を変更できないので、この制約の影響を受けない
-  // google.accounts.id（Googleが提供する「Googleでログイン」ボタンそのもの。
-  // 内部でCOOPを考慮した安全な方式が使われる）に切り替えている
-  function ensureGisLoaded() {
-    if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      let tries = 0;
-      const iv = setInterval(() => {
-        tries++;
-        if (window.google && window.google.accounts && window.google.accounts.id) {
-          clearInterval(iv);
-          resolve();
-        } else if (tries > 100) {
-          clearInterval(iv);
-          reject(new Error('Googleログイン機能の読み込みに失敗しました'));
-        }
-      }, 100);
-    });
-  }
-  // ログイン待ちの間は、バックグラウンドの保険的なポーリング（maybePullIfIdle等）が
-  // 何度もensureAuthTokenを呼んでログイン案内の再表示を繰り返さないようにするフラグ
+  // 当初はgoogle.accounts.oauth2.initTokenClient()のポップアップ方式、次に
+  // google.accounts.id（公式の「Googleでログイン」ボタン）を試したが、
+  // いずれもGitHub Pagesが送るCross-Origin-Opener-Policyヘッダーにより、
+  // ポップアップ・iframeとページの間のwindow.closed／postMessageによる通信が
+  // ブロックされ、ログイン自体はGoogle側で完了してもアプリ側がそれを検知できない
+  // 不具合が実機で確認された。GitHub Pagesは静的ホスティングのためこの
+  // レスポンスヘッダー自体を変更できない。
+  // そのため、ポップアップやiframeを一切使わない、最も基本的な
+  // 「ページ全体をGoogleのログイン画面へ移動し、ログイン後にこのアプリの
+  // URLへ戻ってくる」方式（OAuth 2.0 Implicit Grant、ページ遷移のみで完結し
+  // COOPの影響を受けない）に切り替えている。
+  // ※この方式を使うには、Google Cloud Console側のOAuthクライアント設定で、
+  // 「承認済みのリダイレクトURI」にこのアプリのURLを追加登録する必要がある
+  // （「承認済みのJavaScript生成元」とは別の欄）
   let authGateActive = false;
-  let gisIdInitialized = false;
-  function decodeJwtExpiry(jwt) {
-    try {
-      const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      if (payload && payload.exp) return Math.max(60, payload.exp - Math.floor(Date.now() / 1000));
-    } catch (_) {}
-    return 3600;
+  function authRedirectUri() {
+    return window.location.origin + window.location.pathname;
   }
-  function handleCredentialResponse(response) {
-    if (!response || !response.credential) return;
-    saveAuthToken(response.credential, decodeJwtExpiry(response.credential));
-    hideAuthGate();
-    pullFromCloud(true).catch(e => state(e && e.isAuthError ? ('🔒 ' + e.message) : ('同期に失敗しました: ' + e.message)));
-  }
-  function ensureGisIdInitialized() {
-    if (gisIdInitialized) return;
-    google.accounts.id.initialize({
+  function buildAuthRedirectUrl() {
+    const params = new URLSearchParams({
       client_id: AUTH_CLIENT_ID,
-      callback: handleCredentialResponse
+      redirect_uri: authRedirectUri(),
+      response_type: 'token',
+      scope: 'https://www.googleapis.com/auth/userinfo.email',
+      prompt: 'select_account'
     });
-    gisIdInitialized = true;
+    return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  }
+  // ページ読み込み時に、Googleのログイン画面から戻ってきた直後かどうかを
+  // URLの#以降（フラグメント）から判定する。トークンをURLに残したままにしない
+  // よう、読み取り後は必ずURLから消す
+  function consumeAuthRedirectResult() {
+    // 自動テスト(tools/sync-test)の簡易サンドボックスにはlocation/historyが
+    // 無いため、無ければ何もせず素通りする
+    if (typeof window === 'undefined' || !window.location) return false;
+    const hash = window.location.hash;
+    if (!hash || hash.indexOf('access_token=') === -1) return false;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const token = params.get('access_token');
+    const expiresIn = params.get('expires_in');
+    const error = params.get('error');
+    if (typeof history !== 'undefined' && history.replaceState) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    if (error || !token) return false;
+    saveAuthToken(token, expiresIn);
+    return true;
   }
   function showAuthGate() {
     authGateActive = true;
@@ -791,23 +790,20 @@
       el = document.createElement('div');
       el.id = 'driveAuthGate';
       el.className = 'driveSyncPanel';
-      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です <div id="driveAuthLoginBtnWrap"></div>';
+      el.innerHTML = '🔒 同期にはGoogleアカウントでのログインが必要です '
+        + '<button id="driveAuthLoginBtn" type="button">Googleでログイン</button>';
       const slot = document.getElementById('driveSyncPanelSlot');
       const row = document.getElementById('topStatusRow');
       if (slot) slot.appendChild(el);
       else if (row) row.appendChild(el);
       else status.after(el);
+      const loginBtn = document.getElementById('driveAuthLoginBtn');
+      if (loginBtn) {
+        // ポップアップではなく、このページ自体をGoogleのログイン画面に移動する
+        loginBtn.onclick = () => { window.location.href = buildAuthRedirectUrl(); };
+      }
     }
     if (typeof el.hidden !== 'undefined') el.hidden = false;
-    // Googleが提供する本物の「Googleでログイン」ボタンをその場に描画する
-    // （ポップアップ・COOPまわりの面倒な処理は全てこのボタン側に任せる）
-    ensureGisLoaded().then(() => {
-      ensureGisIdInitialized();
-      const wrap = document.getElementById('driveAuthLoginBtnWrap');
-      if (wrap && !wrap.hasChildNodes()) {
-        google.accounts.id.renderButton(wrap, { theme: 'filled_blue', size: 'medium', text: 'signin', locale: 'ja' });
-      }
-    }).catch(e => state(e.message));
   }
   function hideAuthGate() {
     authGateActive = false;
@@ -815,12 +811,13 @@
     if (el && typeof el.hidden !== 'undefined') el.hidden = true;
   }
   // キャッシュ済みの有効なトークンがあればそれを使う。無ければログイン案内
-  // （Googleの公式ボタン）を表示し、ユーザーのクリックを待つ他ない
+  // （ボタンを押すとGoogleのログイン画面へページごと移動する）を表示し、
+  // ユーザーの操作を待つ他ない
   async function ensureAuthToken() {
     const cached = loadAuthToken();
     if (cached) return cached;
     showAuthGate();
-    throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Sign in with Google」ボタンから操作してください');
+    throw makeAuthError('同期にはGoogleアカウントでのログインが必要です。画面の「Googleでログイン」ボタンから操作してください');
   }
   function isUnauthorizedBody(body) {
     return !!(body && body.ok === false && body.reason === 'unauthorized');
@@ -1044,6 +1041,10 @@
     getLast: () => last,
     markSynced
   };
+
+  // Googleのログイン画面からページ全体が戻ってきた直後の可能性があるため、
+  // 他の処理より先にURLのフラグメントからトークンを回収しておく
+  consumeAuthRedirectResult();
 
   window.addEventListener('load', () => {
     const old = document.getElementById('driveSyncPanel');
