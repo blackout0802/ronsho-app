@@ -27,31 +27,72 @@ async function downloadFullBackup() {
   const payload = buildBackupPayload();
   const fileName = '論証集バックアップ_' + todayStr() + '.json';
   const json = JSON.stringify(payload, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  localStorage.setItem(BACKUP_LAST_AT_KEY, todayStr());
-  localStorage.removeItem(BACKUP_SNOOZE_AT_KEY);
-  renderBackupLastInfo();
-  renderBackupReminderBanner();
-  status.textContent = '📦 バックアップをダウンロードしました。';
-  // ローカルへのダウンロードとは別に、Google Drive（同期用GASと同じ場所）の
-  // 専用フォルダにも日付入りのバックアップファイルとして保存を試みる。
-  // 失敗してもローカルのダウンロード自体は既に成功しているので、
-  // ステータス表示だけ更新して処理は続行する
+  // 先にGoogle Driveへアップロードする。iPadのホーム画面アイコン（PWA）では
+  // <a download>による保存が効かずblobの中身が画面に表示されてページ遷移が
+  // 起きてしまい、後に回したアップロードが中断されて失敗していたため、
+  // 遷移の恐れが無い通信を先に済ませる
+  let driveUploaded = false;
+  let driveError = '';
   if (typeof window.ronshoUploadBackupToDrive === 'function') {
     try {
       await window.ronshoUploadBackupToDrive(payload, fileName);
-      status.textContent = '📦 バックアップをダウンロードし、Google Driveにもアップロードしました。';
+      driveUploaded = true;
     } catch (err) {
-      status.textContent = '📦 バックアップをダウンロードしました（Google Driveへのアップロードは失敗：' + err.message + '）。';
+      driveError = err.message;
     }
+  }
+  // 端末への保存は、共有シートが使える環境（iPadのPWAなど）ではWeb Share APIを
+  // 使う。<a download>はiOSのPWAで無視されてJSONが画面表示されるだけなので、
+  // 使える場合は共有シートを優先する
+  let localSaved = false;
+  let shareCancelled = false;
+  try {
+    const file = new File([json], fileName, { type: 'application/json' });
+    let shared = false;
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+        && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: fileName });
+        shared = true;
+      }
+    } catch (shareErr) {
+      if (shareErr && shareErr.name === 'AbortError') {
+        shareCancelled = true;
+      } else {
+        throw shareErr;
+      }
+    }
+    if (!shared && !shareCancelled) {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+    localSaved = shared || (!shared && !shareCancelled);
+  } catch (err) {
+    localSaved = false;
+  }
+  if (localSaved || driveUploaded) {
+    localStorage.setItem(BACKUP_LAST_AT_KEY, todayStr());
+    localStorage.removeItem(BACKUP_SNOOZE_AT_KEY);
+  }
+  renderBackupLastInfo();
+  renderBackupReminderBanner();
+  if (localSaved && driveUploaded) {
+    status.textContent = '📦 バックアップを保存し、Google Driveにもアップロードしました。';
+  } else if (driveUploaded) {
+    status.textContent = shareCancelled
+      ? '📦 Google Driveにアップロードしました（端末への保存はキャンセルされました）。'
+      : '📦 Google Driveにアップロードしました（端末への保存はできませんでした）。';
+  } else if (localSaved) {
+    status.textContent = '📦 バックアップを端末に保存しました（Google Driveへのアップロードは失敗：' + driveError + '）。';
+  } else {
+    status.textContent = 'バックアップに失敗しました（Google Driveへのアップロードは失敗：' + driveError + '）。通信状況を確認してもう一度お試しください。';
   }
 }
 function daysSince(dateStr) {
