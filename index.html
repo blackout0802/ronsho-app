@@ -2,10 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>論証集アプリ v26.68（検索ハイライト修正・競合リスト同期ほか）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>論証集アプリ v27.0（書籍タブ追加）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0057e7">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="論証集">
 <link rel="icon" href="assets/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <script>
@@ -21,7 +25,7 @@ try {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v26.68</span></h1>
+<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v27.0</span></h1>
 <div id="status"></div>
 <div id="syncConflictBanner" class="syncConflictBanner"></div>
 <div id="backupReminderBanner" class="backupReminderBanner"></div>
@@ -35,6 +39,7 @@ try {
 <button class="tabBtn" data-page="csvPage">📥 データ</button>
 <button class="tabBtn" data-page="pastExamPage">📝 過去問ログ</button>
 <button class="tabBtn" data-page="precedentPage">⚖️ 判例</button>
+<button class="tabBtn" data-page="bookPage">📖 書籍</button>
 <button class="tabBtn" data-page="settingsPage">⚙️ その他</button>
 </div>
 <div id="studyPage" class="page active">
@@ -253,6 +258,42 @@ try {
 <div id="precedentArea"></div>
 </div>
 <!-- ▲▲▲ 新規追加：判例一覧タブ ここまで ▲▲▲ -->
+<!-- ▼▼▼ 新規追加：書籍タブ（既存タブ・既存機能には一切影響しません） ▼▼▼ -->
+<div id="bookPage" class="page">
+<div class="dataIoSection oneLine">
+<select id="bookSubjectFilter"></select>
+<button type="button" id="bookAddToggleBtn" class="pastAddToggleBtn">＋ 書籍を追加</button>
+</div>
+<div class="past-log-header" id="bookForm">
+<div class="bookFormGrid">
+<label>書籍名（必須）<input type="text" id="bookTitleInput" placeholder="例：憲法ガール" style="width:220px;"></label>
+<label>科目 <input type="text" id="bookSubjectInput" placeholder="例：憲法" style="width:110px;" list="subjectSuggestions"></label>
+<label>勉強期間（開始）<input type="date" id="bookStartInput"></label>
+<label>勉強期間（終了）<input type="date" id="bookEndInput"></label>
+<label>現在ページ <input type="number" id="bookCurrentPageInput" min="0" style="width:80px;" placeholder="例：120"></label>
+<label>総ページ数 <input type="number" id="bookTotalPagesInput" min="0" style="width:80px;" placeholder="例：400"></label>
+<label>進捗率 <span class="bookProgressSliderRow"><input type="range" id="bookProgressRange" min="0" max="100" value="0" style="width:120px;"><span id="bookProgressLabel">0%</span></span></label>
+</div>
+<div class="bookCoverRow">
+<div id="bookCoverPreview" class="bookCoverPreview"><span class="bookCoverPlaceholder">📖</span></div>
+<div class="bookCoverActions">
+<label class="stackBtn" for="bookCoverInput" style="cursor:pointer;">🖼 表紙画像を選ぶ</label>
+<input type="file" id="bookCoverInput" accept="image/*" style="display:none;">
+<button type="button" id="bookCoverRemoveBtn" class="stackBtn">✖ 表紙を外す</button>
+<div class="past-log-small-note">JPEG・PNGに対応。自動で縮小して保存します。</div>
+</div>
+</div>
+<textarea id="bookMemoInput" class="editBodyArea precedentTextarea" placeholder="メモ（どのくらい勉強したか・感想など、任意）"></textarea>
+<div class="bookFormActionsRow">
+<button id="bookSaveBtn">保存する</button>
+<span class="clearEntriesLink" id="bookCancelEditBtn">編集をやめる</span>
+</div>
+<div class="past-log-small-note">総ページ数と現在ページの両方を入力すると、進捗率は自動計算されます（ページ未入力のときはスライダーの値を使います）。</div>
+</div>
+<div id="bookProgress" class="quizProgress"></div>
+<div id="bookArea"></div>
+</div>
+<!-- ▲▲▲ 新規追加：書籍タブ ここまで ▲▲▲ -->
 <!-- ▼▼▼ 新規追加：その他タブ（ショートカットキー設定） ▼▼▼ -->
 <div id="settingsPage" class="page">
 <div id="badgesSection"></div>
@@ -433,6 +474,7 @@ try {
 <script src="js/countdown.js"></script>
 <script src="js/past-exam.js"></script>
 <script src="js/precedent.js"></script>
+<script src="js/book.js"></script>
 <script src="js/gamification.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/backup.js"></script>

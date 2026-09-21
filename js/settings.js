@@ -23,6 +23,7 @@ const SHORTCUT_PAGE_LIST = [
   { id: 'csvPage', label: '📥 データ' },
   { id: 'pastExamPage', label: '📝 過去問ログ' },
   { id: 'precedentPage', label: '⚖️ 判例' },
+  { id: 'bookPage', label: '📖 書籍' },
   { id: 'settingsPage', label: '⚙️ その他' }
 ];
 const SHORTCUT_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];

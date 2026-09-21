@@ -1813,3 +1813,30 @@ table.pastMatrixTable th, table.pastMatrixTable td {
   100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
 /* ▲▲▲ ドット絵のペット ここまで ▲▲▲ */
+/* ▼▼▼ 書籍タブ ▼▼▼ */
+#bookForm { flex-direction: column; align-items: stretch; gap: 10px; }
+.bookFormGrid { display: flex; flex-wrap: wrap; gap: 8px 16px; width: 100%; }
+.bookFormGrid label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.bookCoverRow { display: flex; gap: 12px; align-items: flex-start; width: 100%; }
+.bookCoverPreview { width: 72px; height: 96px; flex-shrink: 0; border: 1px solid #dbe4f0; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f1f5f9; }
+.bookCoverPreview img { width: 100%; height: 100%; object-fit: cover; }
+.bookCoverPlaceholder { font-size: 32px; }
+.bookCoverActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bookFormActionsRow { display: flex; gap: 12px; align-items: center; }
+.bookProgressSliderRow { display: inline-flex; align-items: center; gap: 6px; }
+.bookCard { display: flex; gap: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #dbe4f0; border-radius: 10px; background: var(--card-bg, #fff); }
+.bookCoverCell { width: 72px; flex-shrink: 0; }
+.bookCoverCell img { width: 72px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid #dbe4f0; }
+.bookCoverCell .bookCoverPlaceholder { display: flex; align-items: center; justify-content: center; width: 72px; height: 96px; border: 1px solid #dbe4f0; border-radius: 6px; background: #f1f5f9; font-size: 32px; }
+.bookInfoCell { flex: 1; min-width: 0; }
+.bookTitleRow { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.bookMetaRow { font-size: 12px; color: #4a6a90; margin-bottom: 2px; }
+.bookPeriodRow, .bookPagesRow { font-size: 12px; color: #4a6a90; margin-bottom: 2px; }
+.bookProgressBarRow { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.bookProgressBarRow .gamiBarOuter { flex: 1; }
+.bookProgressPct { font-size: 12px; font-weight: 700; color: #0057e7; white-space: nowrap; }
+.bookMemoRow { font-size: 12px; color: #334155; background: #f8fafc; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+.bookActionsRow { display: flex; gap: 8px; }
+.bookEditBtn, .bookDeleteBtn { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid #dbe4f0; background: #fff; cursor: pointer; }
+.bookDeleteBtn { color: #d32f2f; }
+/* ▲▲▲ 書籍タブ ここまで ▲▲▲ */

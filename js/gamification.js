@@ -81,6 +81,23 @@ function computeMemorizedCount() {
 const XP_KEY = 'ronshoXpV1';
 const XP_BY_CONFIDENCE = { perfect: 40, good: 30, unsure: 20, bad: 10 };
 const XP_MEMORIZED_BONUS = 50;
+// 前回より良い暗記度を選んだときのランクアップボーナス（1段階につき+20）。
+// 通常XP（XP_BY_CONFIDENCE）に上乗せする。例：bad→unsureは通常20＋ bonus20、
+// bad→goodは通常30＋bonus40。初回（前回なし）・維持・低下時は0
+const CONFIDENCE_RANK = { bad: 0, unsure: 1, good: 2, perfect: 3 };
+const XP_IMPROVEMENT_BONUS_PER_RANK = 20;
+function calcImprovementBonusXp(oldLevel, newLevel) {
+  const oldRank = CONFIDENCE_RANK[oldLevel];
+  const newRank = CONFIDENCE_RANK[newLevel];
+  if (oldRank === undefined || newRank === undefined) return 0;
+  const steps = newRank - oldRank;
+  return steps > 0 ? steps * XP_IMPROVEMENT_BONUS_PER_RANK : 0;
+}
+function awardImprovementBonusXp(oldLevel, newLevel) {
+  const bonus = calcImprovementBonusXp(oldLevel, newLevel);
+  if (bonus > 0) saveXp(loadXp() + bonus);
+  return bonus;
+}
 function loadXp() {
   const n = Number(localStorage.getItem(XP_KEY));
   return (Number.isFinite(n) && n >= 0) ? n : 0;

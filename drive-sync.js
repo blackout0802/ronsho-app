@@ -29,6 +29,7 @@
   const XP_KEY = 'ronshoXpV1';
   const ORPHANENTRYARCHIVE_KEY = 'ronshoOrphanEntryArchiveV1';
   const PRECEDENT_KEY = 'ronshoPrecedentsV1';
+  const BOOKS_KEY = 'ronshoBooksV1';
   // 編集競合でマージした論証タイトルの記録。バナー→重複チェックで確認する
   // ためのもので、他端末でも同じバナーが出るよう同期対象に含める
   const SYNC_CONFLICTS_KEY = 'ronshoSyncConflictsV1';
@@ -67,6 +68,7 @@
     dailyGoal: '🎯 今日の目標値',
     xp: '🏆 経験値・レベル',
     precedents: '⚖️ 判例',
+    books: '📖 書籍',
     orphanEntryArchive: '🔗 引き継がれなかった学習記録の内容',
     theme: '🌓 表示テーマ',
     petEnabled: '🐾 ペット表示設定',
@@ -153,6 +155,7 @@
     xp: read(XP_KEY, 0),
     orphanEntryArchive: read(ORPHANENTRYARCHIVE_KEY, {}),
     precedents: read(PRECEDENT_KEY, []),
+    books: read(BOOKS_KEY, []),
     theme: readRaw(THEME_KEY, ''),
     petEnabled: readRaw(PET_ENABLED_KEY, ''),
     petSpecies: readRaw(PET_SPECIES_KEY, ''),
@@ -227,6 +230,7 @@
       write(XP_KEY, data.xp || 0);
       write(ORPHANENTRYARCHIVE_KEY, data.orphanEntryArchive || {});
       write(PRECEDENT_KEY, data.precedents || []);
+      write(BOOKS_KEY, data.books || []);
       writeRaw(THEME_KEY, data.theme);
       writeRaw(PET_ENABLED_KEY, data.petEnabled);
       writeRaw(PET_SPECIES_KEY, data.petSpecies);
@@ -265,6 +269,7 @@
       try { speechDict = data.speechDict || [] } catch (_) {}
       try { orphanEntryArchive = data.orphanEntryArchive || {} } catch (_) {}
       try { precedents = data.precedents || [] } catch (_) {}
+      try { books = data.books || [] } catch (_) {}
       try { if (typeof PROGRESS_VIEW_MODES !== 'undefined' && PROGRESS_VIEW_MODES.includes(data.progressViewMode)) progressViewMode = data.progressViewMode; } catch (_) {}
       if (typeof saveEntries === 'function') saveEntries();
       if (typeof renderAll === 'function') renderAll(true);
@@ -274,6 +279,7 @@
       if (typeof renderSpeechDictList === 'function') renderSpeechDictList();
       if (typeof renderOrphanedStudyLog === 'function') renderOrphanedStudyLog();
       if (typeof renderPrecedentPage === 'function') renderPrecedentPage();
+      if (typeof renderBookPage === 'function') renderBookPage();
       if (typeof renderSyncConflictBanner === 'function') renderSyncConflictBanner();
     } finally {
       applyingRemoteData = false;

@@ -108,6 +108,7 @@ function restoreFromBackupPayload(data) {
   if (Array.isArray(data.speechDict)) speechDict = data.speechDict;
   orphanEntryArchive = (data.orphanEntryArchive && typeof data.orphanEntryArchive === 'object') ? data.orphanEntryArchive : {};
   precedents = Array.isArray(data.precedents) ? data.precedents : [];
+  if (typeof saveBooks === 'function') saveBooks(Array.isArray(data.books) ? data.books : []);
   editingEntryTitle = null;
   compareList = [];
   compareModalOpen = false;

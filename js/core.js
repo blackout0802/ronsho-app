@@ -558,6 +558,7 @@ document.querySelectorAll('.tabBtn').forEach(btn => {
     if (btn.dataset.page === 'calendarPage') { renderCalendar(); renderTrendChart(); }
     if (btn.dataset.page === 'quizPage') renderQuizPage();
     if (btn.dataset.page === 'precedentPage') renderPrecedentPage();
+    if (btn.dataset.page === 'bookPage' && typeof renderBookPage === 'function') renderBookPage();
     if (btn.dataset.page === 'settingsPage') settingsPageRenderers.forEach(fn => fn());
     if (btn.dataset.page === 'speechPage') {
       renderSpeechSubjectSelect();
@@ -569,6 +570,17 @@ document.querySelectorAll('.tabBtn').forEach(btn => {
     }
   });
 });
+// アプリ上部の📚見出しを押したらホームタブに戻る（iPad等での操作用）。
+// .tabBtn[data-page="studyPage"]のクリック処理をそのまま流用する
+const appHomeLink = document.getElementById('appHomeLink');
+if (appHomeLink) {
+  appHomeLink.style.cursor = 'pointer';
+  appHomeLink.addEventListener('click', () => {
+    const homeBtn = document.querySelector('.tabBtn[data-page="studyPage"]');
+    if (homeBtn) homeBtn.click();
+    window.scrollTo(0, 0);
+  });
+}
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
 drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
@@ -1160,6 +1172,7 @@ function renderAll(preserveQuiz) {
   }
   renderQuizPage();
   renderPastLogs();
+  if (typeof renderBookPage === 'function') renderBookPage();
   if (typeof renderExamTrendRanking === 'function') renderExamTrendRanking();
   renderCompareBar();
   renderSyncConflictBanner();

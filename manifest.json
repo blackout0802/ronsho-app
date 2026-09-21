@@ -3,8 +3,12 @@
   "short_name": "論証集",
   "description": "法律論証の学習・暗記・ランダム出題アプリ",
   "start_url": "./index.html",
+  "id": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "launch_handler": {
+    "client_mode": ["focus-existing", "auto"]
+  },
   "background_color": "#f2f6fc",
   "theme_color": "#0057e7",
   "lang": "ja",
