@@ -253,6 +253,20 @@ let pastMatrixCurrentEra = localStorage.getItem(PAST_MATRIX_ERA_KEY) === 'H' ? '
 function pastMatrixVisibleYears() {
   return PAST_EXAM_MATRIX_YEARS.filter(y => y.era === pastMatrixCurrentEra);
 }
+// 平成は14行と縦に長いため、H26以降だけを初期表示し、それ以前（H18〜H25）は
+// 詳細ログと同じ「＋残りを表示」形式で展開する。令和は8行なので常に全表示
+const PAST_MATRIX_HEISEI_VISIBLE_FROM = 26;
+let pastMatrixExpanded = false;
+function pastMatrixSplitYears() {
+  const years = pastMatrixVisibleYears();
+  if (pastMatrixCurrentEra !== 'H' || pastMatrixExpanded) {
+    return { visible: years, hidden: [] };
+  }
+  return {
+    visible: years.filter(y => y.num >= PAST_MATRIX_HEISEI_VISIBLE_FROM),
+    hidden: years.filter(y => y.num < PAST_MATRIX_HEISEI_VISIBLE_FROM)
+  };
+}
 
 function renderPastMatrixLegend() {
   const legendEl = document.getElementById('pastMatrixLegend');
@@ -276,7 +290,8 @@ function renderPastMatrixTable() {
     }).join('')
     + '</tr></thead><tbody>';
 
-  pastMatrixVisibleYears().forEach(y => {
+  const split = pastMatrixSplitYears();
+  split.visible.forEach(y => {
     html += '<tr><th class="pastMatrixYearHead" title="' + pastMatrixYearFullLabel(y) + '">' + pastMatrixYearShortLabel(y) + '</th>';
     subjects.forEach(s => {
       if (!pastMatrixColumnApplicable(examType, s.name)) {
@@ -295,6 +310,17 @@ function renderPastMatrixTable() {
     });
     html += '</tr>';
   });
+  if (split.hidden.length > 0) {
+    const first = pastMatrixYearShortLabel(split.hidden[0]);
+    const last = pastMatrixYearShortLabel(split.hidden[split.hidden.length - 1]);
+    html += '<tr class="pastMatrixExpandRow"><td colspan="' + (subjects.length + 1) + '">'
+      + '<button type="button" id="pastMatrixExpandBtn" class="pastLogExpandChip">＋ ' + first + '〜' + last + 'を表示 ▼</button>'
+      + '</td></tr>';
+  } else if (pastMatrixCurrentEra === 'H' && pastMatrixExpanded) {
+    html += '<tr class="pastMatrixExpandRow"><td colspan="' + (subjects.length + 1) + '">'
+      + '<button type="button" id="pastMatrixExpandBtn" class="pastLogExpandChip">▲ 折りたたむ</button>'
+      + '</td></tr>';
+  }
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
@@ -311,6 +337,7 @@ function initPastExamMatrixFeature() {
     btn.textContent = t;
     btn.addEventListener('click', () => {
       pastMatrixCurrentType = t;
+      pastMatrixExpanded = false;
       tabsEl.querySelectorAll('.pastMatrixTabBtn:not(.pastMatrixEraBtn)').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       renderPastMatrixTable();
@@ -329,6 +356,7 @@ function initPastExamMatrixFeature() {
     btn.textContent = e.label;
     btn.addEventListener('click', () => {
       pastMatrixCurrentEra = e.id;
+      pastMatrixExpanded = false;
       try { localStorage.setItem(PAST_MATRIX_ERA_KEY, e.id); } catch (_) {}
       tabsEl.querySelectorAll('.pastMatrixEraBtn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -342,6 +370,11 @@ function initPastExamMatrixFeature() {
   // その場で更新する。回数を減らしたい／間違えて増やした場合は、下の詳細
   // ログ側から該当の行を削除すれば、このマスにも自動的に反映される
   wrap.addEventListener('click', (e) => {
+    if (e.target.closest('#pastMatrixExpandBtn')) {
+      pastMatrixExpanded = !pastMatrixExpanded;
+      renderPastMatrixTable();
+      return;
+    }
     const td = e.target.closest('td.pastMatrixCell:not(.pastMatrixNa)');
     if (!td) return;
     const examType = pastMatrixCurrentType;
