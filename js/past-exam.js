@@ -142,9 +142,26 @@ const PAST_EXAM_MATRIX_SUBJECTS = [
   { name: '実務基礎民事', abbr: '実民' },
   { name: '実務基礎刑事', abbr: '実刑' }
 ];
-const PAST_EXAM_MATRIX_YEARS = [1, 2, 3, 4, 5, 6, 7];
-function pastMatrixYearFullLabel(y) { return y === 1 ? '令和元年' : '令和' + y + '年'; }
-function pastMatrixYearShortLabel(y) { return 'R' + y; }
+const PAST_EXAM_MATRIX_HEISEI_MIN = 18; // 新司法試験の開始年（2006年＝平成18年）
+const PAST_EXAM_MATRIX_HEISEI_MAX = 31;
+// 令和の最終年は当年から自動算出する（2026年＝令和8年。以降も追加対応なしで伸びる）。
+// ただし最低でも8（令和8年）までは表示する
+function pastMatrixMaxReiwaYear() {
+  return Math.max(8, new Date().getFullYear() - 2018);
+}
+function pastMatrixBuildYears() {
+  const years = [];
+  for (let y = PAST_EXAM_MATRIX_HEISEI_MIN; y <= PAST_EXAM_MATRIX_HEISEI_MAX; y++) years.push({ era: 'H', num: y });
+  for (let y = 1; y <= pastMatrixMaxReiwaYear(); y++) years.push({ era: 'R', num: y });
+  return years;
+}
+const PAST_EXAM_MATRIX_YEARS = pastMatrixBuildYears();
+function pastMatrixYearKey(y) { return y.era + y.num; }
+function pastMatrixYearFullLabel(y) {
+  if (y.era === 'H') return '平成' + y.num + '年';
+  return y.num === 1 ? '令和元年' : '令和' + y.num + '年';
+}
+function pastMatrixYearShortLabel(y) { return y.era + y.num; }
 // 列構成は常に全10科目分（科目数が最も多い予備試験を基準とした幅）で統一し、
 // タブを切り替えても表の幅・右側の詳細ログの位置が左右にずれないようにする。
 // 新司法試験には無い科目（実務基礎）は、列は残したまま中身だけ空欄にする
@@ -157,26 +174,41 @@ function pastMatrixColumnApplicable(examType, subjName) {
 }
 function pastMatrixApplicable(examType, subjName, year) {
   if (!pastMatrixColumnApplicable(examType, subjName)) return false;
-  if (subjName === '労働法' && examType === '予備試験' && year < 4) return false;
+  // 労働法が予備試験の選択科目になったのは令和4年から。平成分・令和3年以前は対象外
+  if (subjName === '労働法' && examType === '予備試験') return year.era === 'R' && year.num >= 4;
   return true;
 }
-// 詳細ログの年度欄は自由入力（例：「令和7年（2025）」）なので、そこから
-// 「令和何年か」だけを緩く読み取ってマスの年度と対応付ける
-function pastMatrixParseYearNum(yearText) {
-  const m = String(yearText || '').match(/令和\s*(元|[0-9]+)\s*年/);
-  if (!m) return null;
-  const n = m[1] === '元' ? 1 : Number(m[1]);
-  return (n >= 1 && n <= 7) ? n : null;
+// 詳細ログの年度欄は自由入力（例：「令和7年（2025）」「H30」）なので、そこから
+// 「何 era の何年か」だけを緩く読み取ってマスの年度と対応付ける
+function pastMatrixToHalfWidthDigits(s) {
+  return String(s || '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+function pastMatrixNormalizeYear(era, num) {
+  if (era === 'R' && num >= 1 && num <= pastMatrixMaxReiwaYear()) return { era: era, num: num };
+  if (era === 'H' && num >= PAST_EXAM_MATRIX_HEISEI_MIN && num <= PAST_EXAM_MATRIX_HEISEI_MAX) return { era: era, num: num };
+  return null;
+}
+function pastMatrixParseYear(yearText) {
+  const t = pastMatrixToHalfWidthDigits(yearText);
+  let m = t.match(/令和\s*(元|[0-9]+)\s*年/);
+  if (m) return pastMatrixNormalizeYear('R', m[1] === '元' ? 1 : Number(m[1]));
+  m = t.match(/平成\s*(元|[0-9]+)\s*年/);
+  if (m) return pastMatrixNormalizeYear('H', m[1] === '元' ? 1 : Number(m[1]));
+  m = t.match(/[RＲ]\s*([0-9]{1,2})/);
+  if (m) return pastMatrixNormalizeYear('R', Number(m[1]));
+  m = t.match(/[HＨ]\s*([0-9]{1,2})/);
+  if (m) return pastMatrixNormalizeYear('H', Number(m[1]));
+  return null;
 }
 // 詳細ログ一覧から「種別＋科目＋年度」ごとの最大回数を集計する
 function computePastMatrixRounds(examType) {
   const map = {};
   loadPastExamLogs().forEach(l => {
     if ((l.examType || '予備試験') !== examType) return;
-    const yearNum = pastMatrixParseYearNum(l.year);
-    if (!yearNum) return;
+    const year = pastMatrixParseYear(l.year);
+    if (!year) return;
     const subj = (l.subject || '').trim();
-    const k = subj + '|' + yearNum;
+    const k = subj + '|' + pastMatrixYearKey(year);
     const r = Number(l.round) || 0;
     if (!map[k] || map[k] < r) map[k] = r;
   });
@@ -212,6 +244,15 @@ function upsertPastExamLogEntry(examType, subject, year, round, date) {
 }
 
 let pastMatrixCurrentType = loadPastExamDefaultType();
+// 元号の表示切替（令和／平成）。全22行を一度に表示すると縦に長いため、
+// ボタンでどちらか一方に絞り込む。初期表示は令和。選択はこの端末の表示設定
+// としてlocalStorageに記憶する（見た目だけの切替であり同期対象には含めない）
+const PAST_MATRIX_ERA_KEY = 'ronshoPastMatrixEraV1';
+const PAST_MATRIX_ERAS = [{ id: 'R', label: '令和' }, { id: 'H', label: '平成' }];
+let pastMatrixCurrentEra = localStorage.getItem(PAST_MATRIX_ERA_KEY) === 'H' ? 'H' : 'R';
+function pastMatrixVisibleYears() {
+  return PAST_EXAM_MATRIX_YEARS.filter(y => y.era === pastMatrixCurrentEra);
+}
 
 function renderPastMatrixLegend() {
   const legendEl = document.getElementById('pastMatrixLegend');
@@ -235,7 +276,7 @@ function renderPastMatrixTable() {
     }).join('')
     + '</tr></thead><tbody>';
 
-  PAST_EXAM_MATRIX_YEARS.forEach(y => {
+  pastMatrixVisibleYears().forEach(y => {
     html += '<tr><th class="pastMatrixYearHead" title="' + pastMatrixYearFullLabel(y) + '">' + pastMatrixYearShortLabel(y) + '</th>';
     subjects.forEach(s => {
       if (!pastMatrixColumnApplicable(examType, s.name)) {
@@ -247,10 +288,10 @@ function renderPastMatrixTable() {
         html += '<td class="pastMatrixCell pastMatrixNa"><span class="pastMatrixNaMark">・</span></td>';
         return;
       }
-      const round = roundMap[s.name + '|' + y] || 0;
+      const round = roundMap[s.name + '|' + pastMatrixYearKey(y)] || 0;
       const bucket = pastMatrixBucket(round);
       const title = s.name + ' ' + pastMatrixYearFullLabel(y) + '：' + STUDY_COUNT_LABELS[bucket];
-      html += '<td class="pastMatrixCell" data-subj="' + escapeHtml(s.name) + '" data-year="' + y + '" title="' + escapeHtml(title) + '">' + pastMatrixCellHtml(round) + '</td>';
+      html += '<td class="pastMatrixCell" data-subj="' + escapeHtml(s.name) + '" data-year-era="' + y.era + '" data-year-num="' + y.num + '" title="' + escapeHtml(title) + '">' + pastMatrixCellHtml(round) + '</td>';
     });
     html += '</tr>';
   });
@@ -270,7 +311,26 @@ function initPastExamMatrixFeature() {
     btn.textContent = t;
     btn.addEventListener('click', () => {
       pastMatrixCurrentType = t;
-      tabsEl.querySelectorAll('.pastMatrixTabBtn').forEach(b => b.classList.remove('active'));
+      tabsEl.querySelectorAll('.pastMatrixTabBtn:not(.pastMatrixEraBtn)').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderPastMatrixTable();
+    });
+    tabsEl.appendChild(btn);
+  });
+
+  const sep = document.createElement('span');
+  sep.className = 'pastMatrixTabSep';
+  tabsEl.appendChild(sep);
+
+  PAST_MATRIX_ERAS.forEach(e => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pastMatrixTabBtn pastMatrixEraBtn' + (e.id === pastMatrixCurrentEra ? ' active' : '');
+    btn.textContent = e.label;
+    btn.addEventListener('click', () => {
+      pastMatrixCurrentEra = e.id;
+      try { localStorage.setItem(PAST_MATRIX_ERA_KEY, e.id); } catch (_) {}
+      tabsEl.querySelectorAll('.pastMatrixEraBtn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       renderPastMatrixTable();
     });
@@ -286,8 +346,8 @@ function initPastExamMatrixFeature() {
     if (!td) return;
     const examType = pastMatrixCurrentType;
     const subject = td.dataset.subj;
-    const year = Number(td.dataset.year);
-    const currentRound = computePastMatrixRounds(examType)[subject + '|' + year] || 0;
+    const year = { era: td.dataset.yearEra, num: Number(td.dataset.yearNum) };
+    const currentRound = computePastMatrixRounds(examType)[subject + '|' + pastMatrixYearKey(year)] || 0;
     const nextRound = currentRound + 1;
     const today = new Date();
     const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');

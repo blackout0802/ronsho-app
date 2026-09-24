@@ -1840,3 +1840,7 @@ table.pastMatrixTable th, table.pastMatrixTable td {
 .bookEditBtn, .bookDeleteBtn { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid #dbe4f0; background: #fff; cursor: pointer; }
 .bookDeleteBtn { color: #d32f2f; }
 /* ▲▲▲ 書籍タブ ここまで ▲▲▲ */
+/* ▼▼▼ 過去問マトリクスの元号切替 ▼▼▼ */
+.pastMatrixTabs { flex-wrap: wrap; }
+.pastMatrixTabSep { width: 1px; align-self: stretch; background: #cbd5e1; margin: 2px 6px; }
+/* ▲▲▲ 過去問マトリクスの元号切替 ここまで ▲▲▲ */
