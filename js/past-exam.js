@@ -150,9 +150,10 @@ function pastMatrixMaxReiwaYear() {
   return Math.max(8, new Date().getFullYear() - 2018);
 }
 function pastMatrixBuildYears() {
+  // 新しい年が上に来るよう、降順で並べる
   const years = [];
-  for (let y = PAST_EXAM_MATRIX_HEISEI_MIN; y <= PAST_EXAM_MATRIX_HEISEI_MAX; y++) years.push({ era: 'H', num: y });
-  for (let y = 1; y <= pastMatrixMaxReiwaYear(); y++) years.push({ era: 'R', num: y });
+  for (let y = pastMatrixMaxReiwaYear(); y >= 1; y--) years.push({ era: 'R', num: y });
+  for (let y = PAST_EXAM_MATRIX_HEISEI_MAX; y >= PAST_EXAM_MATRIX_HEISEI_MIN; y--) years.push({ era: 'H', num: y });
   return years;
 }
 const PAST_EXAM_MATRIX_YEARS = pastMatrixBuildYears();
@@ -311,8 +312,12 @@ function renderPastMatrixTable() {
     html += '</tr>';
   });
   if (split.hidden.length > 0) {
-    const first = pastMatrixYearShortLabel(split.hidden[0]);
-    const last = pastMatrixYearShortLabel(split.hidden[split.hidden.length - 1]);
+    // hiddenは古い年側のまとまり。降順表示のため先頭が最大年になるので、
+    // ラベルは小さい年〜大きい年の順に組み立てる
+    const nums = split.hidden.map(y => y.num);
+    const era = split.hidden[0].era;
+    const first = pastMatrixYearShortLabel({ era: era, num: Math.min(...nums) });
+    const last = pastMatrixYearShortLabel({ era: era, num: Math.max(...nums) });
     html += '<tr class="pastMatrixExpandRow"><td colspan="' + (subjects.length + 1) + '">'
       + '<button type="button" id="pastMatrixExpandBtn" class="pastLogExpandChip">＋ ' + first + '〜' + last + 'を表示 ▼</button>'
       + '</td></tr>';
