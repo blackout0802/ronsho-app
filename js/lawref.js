@@ -15,6 +15,7 @@ const LAWREF_LAWS = {
   minsou: { name: '民事訴訟法', lawNum: '平成八年法律第百九号', aliases: ['民事訴訟法', '民訴法', '民訴'] },
   keisou: { name: '刑事訴訟法', lawNum: '昭和二十三年法律第百三十一号', aliases: ['刑事訴訟法', '刑訴法', '刑訴'] },
   gyousohou: { name: '行政事件訴訟法', lawNum: '昭和三十七年法律第百三十九号', aliases: ['行政事件訴訟法', '行訴法'] },
+  gyoufufukushinsa: { name: '行政不服審査法', lawNum: '平成二十六年法律第六十八号', aliases: ['行政不服審査法', '行審法'] },
   gyoutetsuzuki: { name: '行政手続法', lawNum: '平成五年法律第八十八号', aliases: ['行政手続法', '行手法'] },
   kokubai: { name: '国家賠償法', lawNum: '昭和二十二年法律第百二十五号', aliases: ['国家賠償法', '国賠法'] },
   gyoudaishikkou: { name: '行政代執行法', lawNum: '昭和二十三年法律第四十三号', aliases: ['行政代執行法'] },
