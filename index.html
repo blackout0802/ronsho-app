@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>論証集アプリ v29.0（復習キュー・正答率ほか8機能）</title>
+<title>論証集アプリ v29.2（書籍を複数列で表示）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0057e7">
 <meta name="mobile-web-app-capable" content="yes">
@@ -25,7 +25,7 @@ try {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v29.0</span></h1>
+<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v29.2</span></h1>
 <div id="status"></div>
 <div id="syncConflictBanner" class="syncConflictBanner"></div>
 <div id="backupReminderBanner" class="backupReminderBanner"></div>
@@ -277,6 +277,7 @@ try {
 <label>勉強期間（終了）<input type="date" id="bookEndInput"></label>
 <label>現在ページ <input type="number" id="bookCurrentPageInput" min="0" style="width:80px;" placeholder="例：120"></label>
 <label>総ページ数 <input type="number" id="bookTotalPagesInput" min="0" style="width:80px;" placeholder="例：400"></label>
+<label>勉強時間 <input type="number" id="bookStudyHoursInput" min="0" style="width:60px;" placeholder="0"> 時間 <input type="number" id="bookStudyMinsInput" min="0" max="59" style="width:60px;" placeholder="0"> 分</label>
 <label>進捗率 <span class="bookProgressSliderRow"><input type="range" id="bookProgressRange" min="0" max="100" value="0" style="width:120px;"><span id="bookProgressLabel">0%</span></span></label>
 </div>
 <div class="bookCoverRow">
