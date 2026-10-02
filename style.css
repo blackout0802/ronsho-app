@@ -1890,7 +1890,7 @@ html { scrollbar-gutter: stable; }
 /* ▲▲▲ 条文参照リンク・ポップアップ ここまで ▲▲▲ */
 /* ▼▼▼ 連続学習カード・問題演習のツールチップ ▼▼▼ */
 .gamiStreakValue { font-size: 22px; font-weight: 800; color: #ea580c; }
-.toolChipsRow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0 2px; }
+.toolChipsRow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 14px 0 4px; }
 .toolChip {
   display: inline-block; font-size: 12px; font-weight: 700; cursor: pointer;
   border: 1px solid #0057e7; color: #0057e7; background: #fff;
