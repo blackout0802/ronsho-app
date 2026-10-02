@@ -151,7 +151,7 @@ function renderCompareModal() {
   const col = (e) => '<div class="compareCol">'
     + '<div class="compareColTitle">' + buildImportanceStarsHtml(e.importance) + escapeHtml(e.title) + '</div>'
     + '<div class="compareColMeta">' + escapeHtml(e.subject || '') + ' ｜ ' + escapeHtml(e.category || '') + '</div>'
-    + '<div class="compareColBody">' + e.bodyHtml + '</div>'
+    + '<div class="compareColBody">' + linkifyLawRefs(e.bodyHtml, e.subject) + '</div>'
     + buildEntryTagsBlockHtml(e)
     + '</div>';
   root.innerHTML = '<div class="compareModalOverlay" id="compareModalOverlay">'

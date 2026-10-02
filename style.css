@@ -1851,3 +1851,40 @@ html { scrollbar-gutter: stable; }
 .pastMatrixTable th.pastMatrixYearHead { min-width: 3.4em; text-align: center; padding-left: 1px; }
 .pastMatrixExpandRow td { text-align: center; padding: 6px 0; }
 /* ▲▲▲ 過去問マトリクスのずれ防止・平成の折りたたみ ここまで ▲▲▲ */
+/* ▼▼▼ 条文参照リンク・ポップアップ ▼▼▼ */
+.lawRef {
+  text-decoration: underline;
+  text-decoration-color: #0057e7;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.lawRef:hover { background: rgba(0, 87, 231, 0.08); }
+.lawModalOverlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 1200;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.lawModalBox {
+  background: var(--card-bg, #fff); border-radius: 12px; max-width: 560px; width: 100%;
+  max-height: 80vh; display: flex; flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+.lawModalHeader {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; font-weight: 700; border-bottom: 1px solid #dbe4f0;
+}
+.lawModalCloseBtn { cursor: pointer; padding: 0 4px; }
+.lawModalBody { padding: 12px 14px; overflow-y: auto; font-size: 14px; line-height: 1.9; }
+.lawModalFoot { padding: 8px 14px; font-size: 11px; color: #64748b; border-top: 1px solid #eef2f7; }
+.lawModalLoading, .lawModalError { padding: 12px 4px; color: #4a6a90; }
+.lawRefCaption { font-weight: 700; margin-bottom: 2px; }
+.lawRefTitle { font-weight: 700; margin-bottom: 6px; }
+.lawRefPara { margin-bottom: 4px; }
+.lawRefParaNum { font-weight: 700; margin-right: 4px; }
+.lawRefInline {
+  margin: 8px 0; padding: 10px 12px; border: 1px solid #bcd3f5; border-radius: 8px;
+  background: #f2f7ff; font-size: 13px; line-height: 1.9;
+}
+.lawRefInlineHead { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
+.lawRefInlineClose { cursor: pointer; padding: 0 4px; }
+.lawRefInlineFoot { margin-top: 6px; font-size: 11px; color: #64748b; }
+/* ▲▲▲ 条文参照リンク・ポップアップ ここまで ▲▲▲ */

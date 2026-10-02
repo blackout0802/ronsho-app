@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>論証集アプリ v27.5（マトリクス降順表示）</title>
+<title>論証集アプリ v28.0（条文参照リンク）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0057e7">
 <meta name="mobile-web-app-capable" content="yes">
@@ -25,7 +25,7 @@ try {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v27.5</span></h1>
+<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v28.0</span></h1>
 <div id="status"></div>
 <div id="syncConflictBanner" class="syncConflictBanner"></div>
 <div id="backupReminderBanner" class="backupReminderBanner"></div>
@@ -396,8 +396,15 @@ try {
 <div id="speechDictListWrap" class="speechDictListWrap"></div>
 </div>
 <div class="dataIoSection">
-<div class="dataIoSectionTitle">📝 問題演習のデフォルト設定</div>
-<div class="dupCheckIntro">「問題演習」タブを開いたときに最初からチェックされている項目です。</div>
+<div class="dataIoSectionTitle">📜 条文リンクの表示方法</div>
+<div class="dupCheckIntro">論証本文中の「民法90条」のような条文参照（下線付き）を押したときの表示方法です。条文本文はe-Gov法令検索から取得し、端末内にキャッシュします。</div>
+<div class="settingsInlineRow">
+<label><input type="radio" name="lawRefView" value="popup" checked> ポップアップ</label>
+<label><input type="radio" name="lawRefView" value="inline"> その場に展開</label>
+</div>
+</div>
+<div class="dataIoSection">
+<div class="dataIoSectionTitle">📝 問題演習のデフォルト設定</div><div class="dupCheckIntro">「問題演習」タブを開いたときに最初からチェックされている項目です。</div>
 <div class="settingsInlineRow">
 <label><input type="checkbox" id="quizDefaultRandomChk"> 🔀 ランダム</label>
 <label><input type="checkbox" id="quizDefaultOverdueOnlyChk" title="復習期限超過のみ"> ⏰ 超過のみ</label>
@@ -451,6 +458,7 @@ try {
 <!-- ▲▲▲ 新規追加：その他タブ ここまで ▲▲▲ -->
 <div id="compareBar" class="compareBar"></div>
 <div id="compareModalRoot"></div>
+<div id="lawRefModalRoot"></div>
 <div id="driveSyncConflictModal"></div>
 <datalist id="subjectSuggestions">
 <option value="民法"></option>
@@ -475,6 +483,7 @@ try {
 <script src="js/past-exam.js"></script>
 <script src="js/precedent.js"></script>
 <script src="js/book.js"></script>
+<script src="js/lawref.js"></script>
 <script src="js/gamification.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/backup.js"></script>

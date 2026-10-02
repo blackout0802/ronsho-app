@@ -30,6 +30,7 @@
   const ORPHANENTRYARCHIVE_KEY = 'ronshoOrphanEntryArchiveV1';
   const PRECEDENT_KEY = 'ronshoPrecedentsV1';
   const BOOKS_KEY = 'ronshoBooksV1';
+  const LAWREF_VIEW_KEY = 'ronshoLawRefViewV1';
   // 編集競合でマージした論証タイトルの記録。バナー→重複チェックで確認する
   // ためのもので、他端末でも同じバナーが出るよう同期対象に含める
   const SYNC_CONFLICTS_KEY = 'ronshoSyncConflictsV1';
@@ -69,6 +70,7 @@
     xp: '🏆 経験値・レベル',
     precedents: '⚖️ 判例',
     books: '📖 書籍',
+    lawRefView: '📜 条文リンク表示',
     orphanEntryArchive: '🔗 引き継がれなかった学習記録の内容',
     theme: '🌓 表示テーマ',
     petEnabled: '🐾 ペット表示設定',
@@ -156,6 +158,7 @@
     orphanEntryArchive: read(ORPHANENTRYARCHIVE_KEY, {}),
     precedents: read(PRECEDENT_KEY, []),
     books: read(BOOKS_KEY, []),
+    lawRefView: readRaw(LAWREF_VIEW_KEY, ''),
     theme: readRaw(THEME_KEY, ''),
     petEnabled: readRaw(PET_ENABLED_KEY, ''),
     petSpecies: readRaw(PET_SPECIES_KEY, ''),
@@ -231,6 +234,7 @@
       write(ORPHANENTRYARCHIVE_KEY, data.orphanEntryArchive || {});
       write(PRECEDENT_KEY, data.precedents || []);
       write(BOOKS_KEY, data.books || []);
+      writeRaw(LAWREF_VIEW_KEY, data.lawRefView);
       writeRaw(THEME_KEY, data.theme);
       writeRaw(PET_ENABLED_KEY, data.petEnabled);
       writeRaw(PET_SPECIES_KEY, data.petSpecies);

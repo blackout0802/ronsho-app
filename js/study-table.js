@@ -49,9 +49,9 @@ function buildRowHtml(e, idx, showUndo, collapseBody, searchQuery) {
   } else if (collapseBody && !expandedBodySet.has(e.title)) {
     bodyCellContent = '<div class="bodyCellArea collapsedState" data-idx="' + idx + '">📝 タップして表示</div>' + buildEntryTagsBlockHtml(e) + sourceHtml;
   } else if (collapseBody) {
-    bodyCellContent = '<div class="bodyCellArea" data-idx="' + idx + '">' + highlightSearch(e.bodyHtml, searchQuery) + '</div>' + buildEntryTagsBlockHtml(e) + sourceHtml;
+    bodyCellContent = '<div class="bodyCellArea" data-idx="' + idx + '">' + linkifyLawRefs(highlightSearch(e.bodyHtml, searchQuery), e.subject) + '</div>' + buildEntryTagsBlockHtml(e) + sourceHtml;
   } else {
-    bodyCellContent = highlightSearch(e.bodyHtml, searchQuery) + buildEntryTagsBlockHtml(e) + sourceHtml;
+    bodyCellContent = linkifyLawRefs(highlightSearch(e.bodyHtml, searchQuery), e.subject) + buildEntryTagsBlockHtml(e) + sourceHtml;
   }
   return '<tr class="entryRow' + (overdue ? ' overdueRow' : '') + (starred ? ' starredRow' : '') + (bookmarked ? ' bookmarkedRow' : '') + '" data-idx="' + idx + '">'
     + '<td class="checkCell">' + buildConfidenceGroupHtml(idx, log.confidence || null) + '</td>'
@@ -905,6 +905,8 @@ function attachTableClickHandler(wrapEl) {
     const bodyArea = e.target.closest('.bodyCellArea');
     if (bodyArea) {
       e.stopPropagation();
+      // 条文リンクのタップは本文の展開切替にしない（条文表示を優先する）
+      if (e.target.closest('.lawRef')) return;
       const idx = Number(bodyArea.dataset.idx);
       const ent = entries[idx];
       const wasCollapsed = !!(ent && !expandedBodySet.has(ent.title));

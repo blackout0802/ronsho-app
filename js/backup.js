@@ -186,7 +186,8 @@ function restoreFromBackupPayload(data) {
     backupReminderDays: 'ronshoBackupReminderDaysV1',
     lastBackupAt: 'ronshoLastBackupAtV1',
     backupSnoozeAt: 'ronshoBackupSnoozeAtV1',
-    progressViewMode: 'ronshoProgressViewModeV1'
+    progressViewMode: 'ronshoProgressViewModeV1',
+    lawRefView: 'ronshoLawRefViewV1'
   };
   Object.keys(RAW_STRING_RESTORE_KEYS).forEach(field => {
     const v = data[field];

@@ -217,13 +217,14 @@ function renderQuizPage() {
     html += '<div class="quizShowBtn" id="quizShowBtn">📖 本文を表示</div>';
   } else {
     const blankMode = isQuizBlankMode();
-    const blankResult = blankMode ? buildQuizBlankHtml(e.bodyHtml) : null;
+    const quizBodyHtml = linkifyLawRefs(e.bodyHtml, e.subject);
+    const blankResult = blankMode ? buildQuizBlankHtml(quizBodyHtml) : null;
     const noBlankTargets = blankMode && blankResult.count === 0;
     if (blankMode && !noBlankTargets) {
       html += '<div class="quizBody quizBodyBlank">' + blankResult.html + '</div>';
       html += '<div class="quizBlankToolsRow"><span class="quizBlankRevealAllBtn" id="quizBlankRevealAllBtn">👁 すべて表示／隠す</span></div>';
     } else {
-      html += '<div class="quizBody">' + e.bodyHtml + '</div>';
+      html += '<div class="quizBody">' + quizBodyHtml + '</div>';
       if (noBlankTargets) {
         html += '<div class="quizBlankNote">💡 この論証には穴埋め対象（太字の強調）が無いため、通常表示にしています。編集画面で太字にすると穴埋め対象にできます。</div>';
       }
@@ -248,6 +249,8 @@ function renderQuizPage() {
   const blankSpans = quizArea.querySelectorAll('.quizBlank');
   blankSpans.forEach(span => span.addEventListener('click', (evt) => {
     evt.stopPropagation();
+    // 空欄内の条文リンクのタップは条文表示を優先し、空欄の開閉はしない
+    if (evt.target.closest('.lawRef')) return;
     span.classList.toggle('revealed');
   }));
   const blankRevealAllBtn = document.getElementById('quizBlankRevealAllBtn');

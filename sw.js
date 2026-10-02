@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ronsho-app-cache-v203';
+const CACHE_NAME = 'ronsho-app-cache-v204';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const PRECACHE_URLS = [
   './js/past-exam.js',
   './js/precedent.js',
   './js/book.js',
+  './js/lawref.js',
   './js/gamification.js',
   './js/settings.js',
   './js/backup.js',
@@ -43,7 +44,8 @@ self.addEventListener('activate', (event) => {
 });
 
 function isSyncOrAuthRequest(url) {
-  return /googleapis\.com|accounts\.google\.com|google\.com\/gsi|script\.google\.com/.test(url);
+  // e-Gov法令APIは条文の最新版を常に取得したいため、キャッシュ対象外にする
+  return /googleapis\.com|accounts\.google\.com|google\.com\/gsi|script\.google\.com|laws\.e-gov\.go\.jp/.test(url);
 }
 
 self.addEventListener('fetch', (event) => {

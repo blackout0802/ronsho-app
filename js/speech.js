@@ -397,7 +397,7 @@ function renderSpeechCurrentCard() {
     + '<div class="speechTitle">' + escapeHtml(e.title) + '</div>'
     + '<span class="speechFuriganaToggleBtn' + (speechFuriganaVisible ? ' active' : '') + '" id="speechFuriganaToggleBtn" title="読み仮名を表示・編集">🔤 読み仮名</span>'
     + '</div>'
-    + '<div class="speechBody">' + (e.bodyHtml || escapeHtml(e.body || '')) + '</div>'
+    + '<div class="speechBody">' + linkifyLawRefs((e.bodyHtml || escapeHtml(e.body || '')), e.subject) + '</div>'
     + '<div id="speechFuriganaCard" class="speechFuriganaCard"></div>';
   renderSpeechFuriganaCard(e);
 }
