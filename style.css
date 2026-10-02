@@ -1829,7 +1829,10 @@ table.pastMatrixTable th, table.pastMatrixTable td {
 #bookProgressRange::-moz-range-thumb { width: 8px; height: 18px; border-radius: 4px; background: #0057e7; border: none; }
 .bookStudyTimeRow { font-size: 12px; color: #444; margin: 2px 0; }
 .bookProgressSliderRow { display: inline-flex; align-items: center; gap: 6px; }
-.bookCard { display: flex; gap: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #dbe4f0; border-radius: 10px; background: var(--card-bg, #fff); }
+/* 画面幅に応じて列数を自動調整（広い画面で3〜4冊、タブレットで2〜3冊、スマホで1冊） */
+#bookArea { display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(300px, 23%, 480px), 1fr)); gap: 10px; align-items: start; }
+#bookArea > .quizEmpty { grid-column: 1 / -1; }
+.bookCard { display: flex; gap: 12px; padding: 12px; margin-bottom: 0; min-width: 0; box-sizing: border-box; border: 1px solid #dbe4f0; border-radius: 10px; background: var(--card-bg, #fff); }
 .bookCoverCell { width: 72px; flex-shrink: 0; }
 .bookCoverCell img { width: 72px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid #dbe4f0; }
 .bookCoverCell .bookCoverPlaceholder { display: flex; align-items: center; justify-content: center; width: 72px; height: 96px; border: 1px solid #dbe4f0; border-radius: 6px; background: #f1f5f9; font-size: 32px; }
