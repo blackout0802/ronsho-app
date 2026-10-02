@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>演習カード「入力あり」表示 20案プレビュー（一時ページ）</title>
+<style>
+  body { font-family: sans-serif; background: #f2f6fc; padding: 16px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 17px; }
+  .note { font-size: 12px; color: #4a6a90; margin-bottom: 16px; }
+  .sample { margin-bottom: 20px; }
+  .sampleHead { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .qcard {
+    position: relative; background: #fff; border-radius: 16px; padding: 16px 20px;
+    box-shadow: 0 4px 14px rgba(0,87,231,.10); max-width: 520px;
+  }
+  .qnav { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #888; margin-bottom: 6px; }
+  .qtools { font-size: 18px; opacity: .7; }
+  .qtitle { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .qbody { font-size: 13px; color: #444; }
+  /* ---- 20案 ---- */
+  .v1  { border: 3px solid #0057e7; }
+  .v2  { border: 3px solid #16a34a; background: rgba(22,163,74,.08); }
+  .v3  { border: 3px solid #dc2626; background: rgba(220,38,38,.06); }
+  .v4  { border: 3px solid #7c3aed; background: rgba(124,58,237,.07); }
+  .v5  { border-left: 10px solid #ea580c; }
+  .v6  { border-left: 10px solid #0057e7; background: rgba(0,87,231,.06); }
+  .v7  { border: 2px solid #0057e7; padding-top: 34px; }
+  .v7 .ribbon { position: absolute; top: 0; left: 0; right: 0; background: #0057e7; color: #fff;
+    font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 14px 14px 0 0; }
+  .v8  { border: 2px solid #16a34a; }
+  .v8 .corner { position: absolute; top: -12px; right: 12px; background: #16a34a; color: #fff;
+    font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 999px; }
+  .v9  { border: 3px dashed #0057e7; }
+  .v10 { border: 6px double #7c3aed; }
+  .v11 { box-shadow: 0 0 0 4px rgba(0,87,231,.30), 0 4px 14px rgba(0,87,231,.10); }
+  .v12 { box-shadow: 0 0 0 4px rgba(22,163,74,.30), 0 4px 14px rgba(0,87,231,.10); }
+  .v13 { background: linear-gradient(135deg, #e3efff, #ffffff); border: 2px solid #0057e7; }
+  .v14 { background: linear-gradient(135deg, #ffe9a8, #ffffff); border: 2px solid #b45309; }
+  .v15 { border: 2px solid #0d9488; }
+  .v15 .chips { margin-top: 8px; }
+  .v15 .chip { display: inline-block; font-size: 11px; border: 1px solid #0d9488; color: #0d9488;
+    border-radius: 999px; padding: 2px 8px; margin-right: 4px; }
+  .v16 { border: 2px solid #db2777; }
+  .v16 .pill { display: inline-block; font-size: 11px; font-weight: 700; background: #db2777; color: #fff;
+    border-radius: 999px; padding: 2px 10px; margin-left: 8px; vertical-align: middle; }
+  .v17 { border: 2px solid #ea580c; }
+  .v17 .excl { position: absolute; top: 8px; right: 12px; width: 30px; height: 30px; border-radius: 50%;
+    background: #ea580c; color: #fff; font-weight: 900; font-size: 18px; line-height: 30px; text-align: center; }
+  .v18 { border: 2px solid #1e3a5f; background-image: radial-gradient(#c9d8ea 1px, transparent 1px);
+    background-size: 12px 12px; background-color: #f4f8fd; }
+  .v19 { border-bottom: 8px solid #0057e7; }
+  .v20 { background-color: rgba(251,191,36,.12); border: 2px solid #fbbf24; }
+</style>
+</head>
+<body>
+<h1>演習カード「入力あり」表示 20案（現在の設定：🔖・🗒️・⏭️あり）</h1>
+<div class="note">気に入った番号を教えてください。このページは選定後に削除します。</div>
+<div id="samples"></div>
+<script>
+const samples = [
+  [1,'太い青枠','v1',''],
+  [2,'緑枠＋薄緑背景','v2',''],
+  [3,'赤枠＋薄赤背景','v3',''],
+  [4,'紫枠＋薄紫背景','v4',''],
+  [5,'オレンジの左バー','v5',''],
+  [6,'青の左バー＋薄青背景','v6',''],
+  [7,'上部リボン帯','v7','<div class="ribbon">📌 ブックマーク・メモ・スキップ設定あり</div>'],
+  [8,'右上バッジ','v8','<div class="corner">設定あり</div>'],
+  [9,'青の点線枠','v9',''],
+  [10,'紫の二重枠','v10',''],
+  [11,'青のグロー（影）','v11',''],
+  [12,'緑のグロー（影）','v12',''],
+  [13,'薄青グラデーション＋青枠','v13',''],
+  [14,'黄グラデーション＋茶枠','v14',''],
+  [15,'チップ表示（何が設定か分かる）','v15','<div class="chips"><span class="chip">🔖あり</span><span class="chip">🗒️あり</span><span class="chip">⏭️あり</span></div>'],
+  [16,'タイトル横ピル','v16','PILL'],
+  [17,'右上！マーク','v17','<div class="excl">!</div>'],
+  [18,'ドット柄＋紺枠','v18',''],
+  [19,'下部の太線アクセント','v19',''],
+  [20,'現在のまま（薄黄＋黄枠・比較用）','v20',''],
+];
+const wrap = document.getElementById('samples');
+samples.forEach(([n, name, cls, extra]) => {
+  const div = document.createElement('div');
+  div.className = 'sample';
+  let title = '民法：錯誤';
+  if (cls === 'v16') title += '<span class="pill">設定あり</span>';
+  div.innerHTML = '<div class="sampleHead">' + n + '. ' + name + '</div>'
+    + '<div class="qcard ' + cls + '">' + (extra === 'PILL' ? '' : extra)
+    + '<div class="qnav"><span>民法 ｜ 総則</span><span class="qtools">⋮</span></div>'
+    + '<div class="qtitle">' + title + '</div>'
+    + '<div class="qbody">表意者は、錯誤が法律行為の目的及び取引上の社会通念に照らして重要なものであるときに限り…</div>'
+    + '</div>';
+  wrap.appendChild(div);
+});
+</script>
+</body>
+</html>
