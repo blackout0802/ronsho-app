@@ -1898,3 +1898,35 @@ html { scrollbar-gutter: stable; }
 }
 .toolChip:active { background: #0057e7; color: #fff; }
 /* ▲▲▲ 連続学習カード・問題演習のツールチップ ここまで ▲▲▲ */
+/* ▼▼▼ 復習キュー・正答率・タグ別進捗・条文ストック・書籍紐付け・読込差分 ▼▼▼ */
+.reviewQueueCard {
+  background: var(--card-bg); border-radius: 16px; padding: 14px 20px;
+  box-shadow: 0 4px 16px rgba(0, 87, 231, 0.1); margin-bottom: 12px;
+}
+#reviewQueueStartBtn {
+  margin-top: 8px; padding: 8px 18px; border-radius: 999px; border: none;
+  background: #0057e7; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer;
+}
+.correctRate { font-size: 10px; color: #0d9488; font-weight: 700; margin-top: 2px; }
+.quizScore { font-size: 15px; font-weight: 800; color: #0057e7; margin-top: 10px; }
+.tagProgressWrap { margin-top: 12px; }
+.tagProgressTitle { font-weight: 800; font-size: 14px; margin-bottom: 6px; }
+.tagProgressRow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+.tagProgressName { min-width: 110px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tagProgressBarWrap { flex: 1; }
+.tagProgressPct { min-width: 90px; text-align: right; color: var(--text-secondary); white-space: nowrap; }
+.lawStockCard {
+  background: var(--card-bg); border: 1px solid #dbe4f0; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.lawStockTitle { font-weight: 700; font-size: 14px; }
+.lawStockCaption { font-size: 12px; color: var(--text-secondary); }
+.lawStockSnippet { font-size: 12px; color: #334155; margin: 4px 0; }
+.bookLinkedRow { font-size: 12px; color: #4a6a90; margin-bottom: 6px; }
+.bookEntryPickerWrap { width: 100%; }
+.bookEntryPickerLabel { font-size: 13px; font-weight: 700; }
+.bookEntryPickerList { max-height: 180px; overflow-y: auto; border: 1px solid #dbe4f0; border-radius: 8px; padding: 6px 8px; margin-top: 6px; }
+.bookEntryCheckLabel { display: block; font-size: 12px; padding: 2px 0; cursor: pointer; }
+.importDiffGroup { margin-top: 8px; }
+.importDiffGroupTitle { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+/* ▲▲▲ 復習キュー・正答率・タグ別進捗・条文ストック・書籍紐付け・読込差分 ここまで ▲▲▲ */

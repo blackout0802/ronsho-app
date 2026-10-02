@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>論証集アプリ v28.4（チップ位置調整）</title>
+<title>論証集アプリ v29.0（復習キュー・正答率ほか8機能）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0057e7">
 <meta name="mobile-web-app-capable" content="yes">
@@ -25,7 +25,7 @@ try {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v28.4</span></h1>
+<h1 id="appHomeLink" title="タップでホームに戻る"><span class="appIcon">📚</span><span class="appTitleText">論証集アプリ v29.0</span></h1>
 <div id="status"></div>
 <div id="syncConflictBanner" class="syncConflictBanner"></div>
 <div id="backupReminderBanner" class="backupReminderBanner"></div>
@@ -40,6 +40,7 @@ try {
 <button class="tabBtn" data-page="pastExamPage">📝 過去問ログ</button>
 <button class="tabBtn" data-page="precedentPage">⚖️ 判例</button>
 <button class="tabBtn" data-page="bookPage">📖 書籍</button>
+<button class="tabBtn" data-page="lawStockPage">📜 条文</button>
 <button class="tabBtn" data-page="settingsPage">⚙️ その他</button>
 </div>
 <div id="studyPage" class="page active">
@@ -51,6 +52,7 @@ try {
 <div id="gamificationRow" class="gamificationRow"></div>
 </div>
 <div id="weaknessDiagnosisCard"></div>
+<div id="reviewQueueCard"></div>
 <div id="progressSummary">
 <div id="subjectProgressTitle" class="subjectProgressTitle">📚 科目別 暗記完了率・学習回数</div>
 <div id="topStatusRow" class="topStatusRow">
@@ -153,6 +155,7 @@ try {
 <button type="button" id="checkDuplicatesBtn">🔍 重複チェック</button>
 </div>
 <div id="duplicateResultsWrap"></div>
+<div id="importDiffWrap"></div>
 <div class="dataIoSection">
 <div class="dataIoSectionTitle">🗄 削除アーカイブ</div>
 <div class="dupCheckIntro">重複チェックから削除した論証を保管しています。誤って削除した場合はここから復元できます。</div>
@@ -230,6 +233,7 @@ try {
 <div id="precedentPage" class="page">
 <div class="dataIoSection oneLine">
 <select id="precedentSubjectFilter"></select>
+<input type="text" id="precedentSearchInput" placeholder="🔍 全文検索" style="width:140px;">
 <button type="button" id="precedentAddToggleBtn" class="pastAddToggleBtn">＋ 判例を追加</button>
 </div>
 <div class="past-log-header" id="precedentPasteBlock">
@@ -262,6 +266,7 @@ try {
 <div id="bookPage" class="page">
 <div class="dataIoSection oneLine">
 <select id="bookSubjectFilter"></select>
+<input type="text" id="bookSearchInput" placeholder="🔍 全文検索" style="width:140px;">
 <button type="button" id="bookAddToggleBtn" class="pastAddToggleBtn">＋ 書籍を追加</button>
 </div>
 <div class="past-log-header" id="bookForm">
@@ -284,6 +289,12 @@ try {
 </div>
 </div>
 <textarea id="bookMemoInput" class="editBodyArea precedentTextarea" placeholder="メモ（どのくらい勉強したか・感想など、任意）"></textarea>
+<div class="bookEntryPickerWrap">
+<label class="bookEntryPickerLabel">🔗 関連論証（この本の範囲）</label>
+<input type="text" id="bookEntrySearchInput" placeholder="🔍 論証タイトルで絞り込み" style="width:220px;">
+<div class="past-log-small-note">科目が入力されていれば、その科目の論証だけが表示されます。チェックした論証がこの書籍に紐づきます。</div>
+<div id="bookEntryPickerList" class="bookEntryPickerList"></div>
+</div>
 <div class="bookFormActionsRow">
 <button id="bookSaveBtn">保存する</button>
 <span class="clearEntriesLink" id="bookCancelEditBtn">編集をやめる</span>
@@ -294,6 +305,16 @@ try {
 <div id="bookArea"></div>
 </div>
 <!-- ▲▲▲ 新規追加：書籍タブ ここまで ▲▲▲ -->
+<!-- ▼▼▼ 新規追加：条文ストックタブ（既存タブ・既存機能には一切影響しません） ▼▼▼ -->
+<div id="lawStockPage" class="page">
+<div class="dataIoSection oneLine">
+<span class="dupCheckIntro">論証本文の条文リンクから取得した条文がここに集まります。オフラインでも確認できます。</span>
+<button type="button" id="lawStockClearBtn" class="stackBtn">🗑️ すべて削除</button>
+</div>
+<div id="lawStockProgress" class="quizProgress"></div>
+<div id="lawStockArea"></div>
+</div>
+<!-- ▲▲▲ 新規追加：条文ストックタブ ここまで ▲▲▲ -->
 <!-- ▼▼▼ 新規追加：その他タブ（ショートカットキー設定） ▼▼▼ -->
 <div id="settingsPage" class="page">
 <div id="badgesSection"></div>
@@ -452,6 +473,10 @@ try {
 <div class="dupCheckIntro">ホーム画面の「🎯 今日の目標」で目安にする、1日あたりの問題数です。</div>
 <div class="settingsInlineRow">
 <input type="number" id="dailyGoalInput" min="1" max="999" style="width:70px;"> 問
+</div>
+<div class="dupCheckIntro">週次目標（直近7日間の合計問題数）です。ホーム画面の目標カードに進捗が表示されます。</div>
+<div class="settingsInlineRow">
+<input type="number" id="weeklyGoalInput" min="1" max="9999" style="width:70px;"> 問／週
 </div>
 </div>
 </div>

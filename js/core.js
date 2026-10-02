@@ -85,6 +85,10 @@ let quizMinCount = 0;
 let quizOverdueMode = false;
 let quizSequentialMode = true;
 let quizComboCount = 0;
+// 問題演習セッションごとの正答数・回答数（#2 正答率統計用）。
+// startQuiz／startQuizWithTitlesでリセットし、advanceQuizで加算する
+let quizSessionAnswered = 0;
+let quizSessionCorrect = 0;
 // カード右上の「⋮」メニュー（🔖🗒️⏭️✏️🗑️）の開閉状態。カードが切り替わったら
 // 自動的に閉じるよう、どの論証で開いたかもあわせて保持する（永続化はしない）
 let quizToolsMenuOpen = false;
@@ -293,7 +297,38 @@ function renderProgressSummary() {
   }
   if (titleEl) titleEl.textContent = '📚 科目別 暗記完了率・学習回数';
   el.innerHTML = progressViewMode === 'importance' ? buildImportanceMatrixHtml(subjectStats, subjectOrderList) : subjectHtml;
+  el.innerHTML += buildTagProgressHtml();
 }
+// ▼▼▼ タグ別 暗記率（タグを付けている論証が対象。暗記率の低い順に表示） ▼▼▼
+function buildTagProgressHtml() {
+  const stats = {};
+  entries.forEach(e => {
+    (e.tags || []).forEach(t => {
+      if (!t) return;
+      if (!stats[t]) stats[t] = { total: 0, memorized: 0 };
+      stats[t].total++;
+      if (studyLog[e.title] && studyLog[e.title].memorized) stats[t].memorized++;
+    });
+  });
+  const tags = Object.keys(stats).sort((a, b) => {
+    const pa = stats[a].memorized / stats[a].total;
+    const pb = stats[b].memorized / stats[b].total;
+    return pa - pb;
+  });
+  if (tags.length === 0) return '';
+  return '<div class="tagProgressWrap"><div class="tagProgressTitle">🏷 タグ別 暗記率</div>'
+    + tags.map(t => {
+      const st = stats[t];
+      const p = Math.round((st.memorized / st.total) * 100);
+      return '<div class="tagProgressRow">'
+        + '<span class="tagProgressName">🏷 ' + escapeHtml(t) + '</span>'
+        + '<div class="tagProgressBarWrap"><div class="studyCountBarOuter thin"><div class="studyCountSeg" style="width:' + p + '%;background:linear-gradient(135deg,#10b981,#00c2ff);"></div><div class="studyCountSeg" style="width:' + (100 - p) + '%;background:#f1f5f9;"></div></div></div>'
+        + '<span class="tagProgressPct">' + p + '%（' + st.memorized + '/' + st.total + '）</span>'
+        + '</div>';
+    }).join('')
+    + '</div>';
+}
+// ▲▲▲ タグ別 暗記率 ここまで ▲▲▲
 // ▼▼▼ 新規追加：科目別の弱点自動診断
 // 専用のデータは持たず、既存のstudyLog（暗記済みフラグ・苦手フラグ）と
 // getNextReviewInfo()（復習期限超過の判定。問題演習の出題フィルタと同じ
@@ -559,6 +594,7 @@ document.querySelectorAll('.tabBtn').forEach(btn => {
     if (btn.dataset.page === 'quizPage') renderQuizPage();
     if (btn.dataset.page === 'precedentPage') renderPrecedentPage();
     if (btn.dataset.page === 'bookPage' && typeof renderBookPage === 'function') renderBookPage();
+    if (btn.dataset.page === 'lawStockPage' && typeof renderLawStockPage === 'function') renderLawStockPage();
     if (btn.dataset.page === 'settingsPage') settingsPageRenderers.forEach(fn => fn());
     if (btn.dataset.page === 'speechPage') {
       renderSpeechSubjectSelect();
@@ -884,6 +920,71 @@ async function parseSingleFile(file) {
   });
   return parsed;
 }
+// ▼▼▼ Word再読込の差分表示（追加・削除・本文変更のタイトル一覧） ▼▼▼
+// 直近1回分の結果だけを端末内に保持する一時表示であり、同期対象には含めない
+const LAST_IMPORT_DIFF_KEY = 'ronshoLastImportDiffV1';
+const IMPORT_DIFF_DISPLAY_LIMIT = 30;
+function buildImportDiff(oldList, newList) {
+  const oldByTitle = new Map((oldList || []).map(e => [e.title, e]));
+  const newByTitle = new Map((newList || []).map(e => [e.title, e]));
+  const added = [], removed = [], changed = [];
+  newByTitle.forEach((e, title) => {
+    if (!oldByTitle.has(title)) added.push(title);
+    else if ((oldByTitle.get(title).body || '') !== (e.body || '')) changed.push(title);
+  });
+  oldByTitle.forEach((e, title) => {
+    if (!newByTitle.has(title)) removed.push(title);
+  });
+  const cap = arr => arr.slice(0, 200);
+  return { at: new Date().toISOString(), added: cap(added), removed: cap(removed), changed: cap(changed) };
+}
+function saveLastImportDiff(diff) {
+  try {
+    localStorage.setItem(LAST_IMPORT_DIFF_KEY, JSON.stringify(diff));
+  } catch (e) {
+    console.error('読込差分の保存に失敗しました:', e);
+  }
+}
+function loadLastImportDiff() {
+  try {
+    const raw = localStorage.getItem(LAST_IMPORT_DIFF_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+let importDiffVisible = false;
+function renderImportDiff() {
+  const wrap = document.getElementById('importDiffWrap');
+  if (!wrap) return;
+  const diff = loadLastImportDiff();
+  if (!diff || (diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0)) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const atLabel = diff.at ? diff.at.slice(0, 16).replace('T', ' ') : '';
+  const groupHtml = (label, titles) => {
+    if (titles.length === 0) return '';
+    const shown = titles.slice(0, IMPORT_DIFF_DISPLAY_LIMIT);
+    return '<div class="importDiffGroup"><div class="importDiffGroupTitle">' + label + '（' + titles.length + '件）</div>'
+      + shown.map(t => '<div class="reviewItem">' + escapeHtml(t) + '</div>').join('')
+      + (titles.length > shown.length ? '<div class="past-log-small-note">他' + (titles.length - shown.length) + '件</div>' : '')
+      + '</div>';
+  };
+  wrap.innerHTML = '<div class="dataIoSection"><div class="dataIoSectionTitle">📝 前回読込の差分（' + escapeHtml(atLabel) + '）</div>'
+    + '<div class="dupCheckIntro">追加 ' + diff.added.length + '件 ／ 削除 ' + diff.removed.length + '件 ／ 本文変更 ' + diff.changed.length + '件</div>'
+    + '<span class="speechDictToggle" id="importDiffToggleBtn">' + (importDiffVisible ? '▼ 一覧を隠す' : '▶ 一覧を表示する') + '</span>'
+    + (importDiffVisible
+      ? groupHtml('➕ 追加', diff.added) + groupHtml('🗑 削除', diff.removed) + groupHtml('✏️ 本文変更', diff.changed)
+      : '')
+    + '</div>';
+  const btn = document.getElementById('importDiffToggleBtn');
+  if (btn) btn.addEventListener('click', () => {
+    importDiffVisible = !importDiffVisible;
+    renderImportDiff();
+  });
+}
+// ▲▲▲ Word再読込の差分表示 ここまで ▲▲▲
 async function handleFiles(files) {
   status.textContent = '読み込み中...';
   tableWrap.innerHTML = '';
@@ -915,6 +1016,9 @@ async function handleFiles(files) {
     const carriedOverHighlightCount = (typeof carryOverManualHighlightsOnReimport === 'function')
       ? carryOverManualHighlightsOnReimport(oldTouchedEntries, newEntries)
       : 0;
+    // 今回読み込んだ科目の範囲で、追加・削除・本文変更の差分を記録する
+    // （データタブの「前回読込の差分」で確認できる。端末内の一時表示のため同期対象外）
+    saveLastImportDiff(buildImportDiff(oldTouchedEntries, newEntries));
     const newBySubject = new Map();
     newEntries.forEach(e => {
       const s = e.subject || 'その他';
@@ -1173,6 +1277,8 @@ function renderAll(preserveQuiz) {
   renderQuizPage();
   renderPastLogs();
   if (typeof renderBookPage === 'function') renderBookPage();
+  if (typeof renderLawStockPage === 'function') renderLawStockPage();
+  if (typeof renderImportDiff === 'function') renderImportDiff();
   if (typeof renderExamTrendRanking === 'function') renderExamTrendRanking();
   renderCompareBar();
   renderSyncConflictBanner();

@@ -52,6 +52,19 @@ document.getElementById('quoteCard') && document.getElementById('quoteCard').add
 
 const DAILY_GOAL_KEY = 'ronshoDailyGoalV1';
 const DEFAULT_DAILY_GOAL = 10;
+// 週次目標（直近7日間の学習件数に対する目標）。日次目標と同じく
+// 同期対象の設定として drive-sync.js・js/backup.js にも登録する
+const WEEKLY_GOAL_KEY = 'ronshoWeeklyGoalV1';
+const DEFAULT_WEEKLY_GOAL = 70;
+function loadWeeklyGoal() {
+  const raw = localStorage.getItem(WEEKLY_GOAL_KEY);
+  const n = Number(raw);
+  return (raw && n > 0) ? n : DEFAULT_WEEKLY_GOAL;
+}
+function saveWeeklyGoal(n) {
+  localStorage.setItem(WEEKLY_GOAL_KEY, String(n));
+  if (typeof window !== 'undefined' && typeof window.ronshoSyncNotifyChange === 'function') window.ronshoSyncNotifyChange();
+}
 function loadDailyGoal() {
   const raw = localStorage.getItem(DAILY_GOAL_KEY);
   const n = Number(raw);
@@ -250,6 +263,10 @@ function renderGamificationPanel() {
   const todayCount = getTodayStudiedCount();
   const goal = loadDailyGoal();
   const goalPct = goal > 0 ? Math.min(100, Math.round((todayCount / goal) * 100)) : 0;
+  // 週次目標（直近7日間の合計）。日次リングの下に小さく進捗を出す
+  const weeklyGoal = loadWeeklyGoal();
+  const weeklyCount = (typeof getDailyStudyCounts === 'function')
+    ? sumStudyCountsInRange(getDailyStudyCounts(), 0, 7) : 0;
   const growth = getGrowthToday();
   const streakInfo = (typeof computeStudyStreak === 'function') ? computeStudyStreak() : { streak: 0, todayDone: false };
   let streakSub;
@@ -282,6 +299,7 @@ function renderGamificationPanel() {
     + '<div class="gamiCard gamiGoalCard" id="dailyGoalRing" title="目標は「⚙️ その他」タブで変更できます">'
     + '<div class="gamiRing" style="background: conic-gradient(#0057e7 ' + goalPct + '%, #e6edf7 ' + goalPct + '% 100%);"><div class="gamiRingInner">' + todayCount + ' / ' + goal + '</div></div>'
     + '<div class="gamiCardTitle">🎯 今日の目標</div>'
+    + '<div class="gamiCardSub">週 ' + weeklyCount + ' / ' + weeklyGoal + '問</div>'
     + '</div>'
     + '<div class="gamiCard gamiGrowthCard">' + growthHtml + '</div>'
     + streakHtml;

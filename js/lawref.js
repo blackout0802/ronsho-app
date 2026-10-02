@@ -315,6 +315,85 @@ function toggleLawRefInline(ref) {
       + 'オンラインになってからもう一度お試しください。（' + escapeHtml(err.message) + '）</div>';
   });
 }
+// --- 条文ストック（一覧タブ）：取得済みキャッシュを辞書として眺める ---
+function lawrefStockList() {
+  const cache = lawrefLoadCache();
+  return Object.keys(cache).map(key => {
+    const sep = key.indexOf('|');
+    const lid = sep === -1 ? key : key.slice(0, sep);
+    const rest = sep === -1 ? '' : key.slice(sep + 1);
+    const dash = rest.indexOf('-');
+    const num = dash === -1 ? rest : rest.slice(0, dash);
+    const branch = dash === -1 ? null : rest.slice(dash + 1);
+    const lawName = (LAWREF_LAWS[lid] && LAWREF_LAWS[lid].name) || lid;
+    return Object.assign({
+      key: key, lid: lid, num: num, branch: branch,
+      label: lawName + num + '条' + (branch ? 'の' + branch : '')
+    }, cache[key]);
+  }).sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+function renderLawStockPage() {
+  const area = document.getElementById('lawStockArea');
+  if (!area) return;
+  const list = lawrefStockList();
+  const countEl = document.getElementById('lawStockProgress');
+  if (countEl) countEl.textContent = list.length > 0 ? list.length + '件' : '';
+  if (list.length === 0) {
+    area.innerHTML = '<div class="quizEmpty">まだ取得した条文がありません。論証本文の条文リンクを押すとここに集まります。</div>';
+    return;
+  }
+  area.innerHTML = list.map(item => {
+    const firstPara = (item.paras && item.paras[0] && item.paras[0].text) || '';
+    const snippet = firstPara.length > 60 ? firstPara.slice(0, 60) + '…' : firstPara;
+    return '<div class="lawStockCard" data-key="' + escapeHtml(item.key) + '">'
+      + '<div class="lawStockTitle">📜 ' + escapeHtml(item.label) + '</div>'
+      + (item.caption ? '<div class="lawStockCaption">' + escapeHtml(item.caption) + '</div>' : '')
+      + (snippet ? '<div class="lawStockSnippet">' + escapeHtml(snippet) + '</div>' : '')
+      + '<div class="bookActionsRow">'
+      + '<button type="button" class="lawStockViewBtn" data-key="' + escapeHtml(item.key) + '">📖 表示</button>'
+      + '<button type="button" class="lawStockDeleteBtn" data-key="' + escapeHtml(item.key) + '">🗑️ 削除</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+function initLawStockFeature() {
+  const area = document.getElementById('lawStockArea');
+  const clearBtn = document.getElementById('lawStockClearBtn');
+  if (!area) return;
+  area.addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('.lawStockViewBtn');
+    if (viewBtn) {
+      const item = lawrefStockList().find(x => x.key === viewBtn.dataset.key);
+      if (!item) return;
+      const span = document.createElement('span');
+      span.setAttribute('data-lid', item.lid);
+      span.setAttribute('data-num', String(item.num));
+      if (item.branch) span.setAttribute('data-branch', String(item.branch));
+      span.setAttribute('data-label', item.label);
+      openLawRefPopup(span);
+      return;
+    }
+    const delBtn = e.target.closest('.lawStockDeleteBtn');
+    if (delBtn) {
+      const cache = lawrefLoadCache();
+      if (!cache[delBtn.dataset.key]) return;
+      delete cache[delBtn.dataset.key];
+      lawrefSaveCache(cache);
+      renderLawStockPage();
+      status.textContent = '🗑️ 条文ストックから削除しました。';
+    }
+  });
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (Object.keys(lawrefLoadCache()).length === 0) return;
+    if (!confirm('取得済みの条文ストックをすべて削除しますか？（条文リンクから再取得できます）')) return;
+    lawrefSaveCache({});
+    renderLawStockPage();
+    status.textContent = '🗑️ 条文ストックをすべて削除しました。';
+  });
+  renderLawStockPage();
+}
+initLawStockFeature();
+// 論証本文中の条文リンク（span.lawRef）のタップを拾う委任リスナー
 document.addEventListener('click', (e) => {
   const ref = e.target.closest ? e.target.closest('.lawRef') : null;
   if (ref) {

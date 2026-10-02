@@ -139,7 +139,24 @@ function startQuiz() {
   quizRevealed = false;
   quizStarted = true;
   quizComboCount = 0;
+  quizSessionAnswered = 0;
+  quizSessionCorrect = 0;
   renderQuizPage();
+}
+// タイトル指定で演習を開始する（復習キュー・書籍の範囲演習用）。
+// フィルタ条件ではなく明示のタイトル集合をそのまま出題する
+function startQuizWithTitles(titles) {
+  const set = new Set(titles || []);
+  quizPool = entries.filter(e => set.has(e.title));
+  quizIndex = 0;
+  quizRevealed = false;
+  quizStarted = true;
+  quizComboCount = 0;
+  quizSessionAnswered = 0;
+  quizSessionCorrect = 0;
+  const tabBtn = document.querySelector('.tabBtn[data-page="quizPage"]');
+  if (tabBtn) tabBtn.click();
+  else renderQuizPage();
 }
 function renderQuizPage() {
   if (entries.length === 0) {
@@ -171,7 +188,12 @@ function renderQuizPage() {
       ? ''
       : '📌 学習回数が最も少ない（<strong>' + quizMinCount + '回</strong>）論点 <strong>' + quizPool.length + '件</strong>' + extraNote + ' のみを出題しています。この回数のものを一通り学習すると、次回はより多く学習した論点が対象から外れ、新しい最少回数のグループが出題されます。');
   if (quizIndex >= quizPool.length) {
-    quizArea.innerHTML = '<div class="quizCard"><div class="quizFinished">🎉 全' + quizPool.length + '問終了しました！お疲れさまでした。もう一度「スタート／やり直す」を押すと出題を最初からやり直せます。</div></div>';
+    let scoreHtml = '';
+    if (quizSessionAnswered > 0) {
+      const pct = Math.round((quizSessionCorrect / quizSessionAnswered) * 100);
+      scoreHtml = '<div class="quizScore">📊 正答率 ' + pct + '%（' + quizSessionCorrect + ' / ' + quizSessionAnswered + '問）</div>';
+    }
+    quizArea.innerHTML = '<div class="quizCard"><div class="quizFinished">🎉 全' + quizPool.length + '問終了しました！お疲れさまでした。もう一度「スタート／やり直す」を押すと出題を最初からやり直せます。</div>' + scoreHtml + '</div>';
     return;
   }
   const e = quizPool[quizIndex];
@@ -311,6 +333,8 @@ function renderQuizPage() {
   function advanceQuiz(level, sourceEl) {
     const idx = entries.findIndex(x => x.title === e.title);
     if (idx !== -1) setConfidence(idx, level, sourceEl);
+    quizSessionAnswered++;
+    if (level === 'good' || level === 'perfect') quizSessionCorrect++;
     quizComboCount = (level === 'good' || level === 'perfect') ? quizComboCount + 1 : 0;
     quizIndex++;
     quizRevealed = false;

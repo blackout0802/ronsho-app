@@ -19,6 +19,7 @@ if (entries.length > 0) {
 }
 renderPastLogs();
 if (typeof renderBookPage === 'function') renderBookPage();
+if (typeof renderLawStockPage === 'function') renderLawStockPage();
 const dupArchiveToggleBtn = document.getElementById('dupArchiveToggleBtn');
 if (dupArchiveToggleBtn) dupArchiveToggleBtn.addEventListener('click', () => {
   dupArchiveListVisible = !dupArchiveListVisible;

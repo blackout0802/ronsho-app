@@ -26,6 +26,7 @@
   const SPEECHDICT_KEY = 'ronshoSpeechDictV1';
   const DAILYSTATS_KEY = 'ronshoDailyStatsV1';
   const DAILYGOAL_KEY = 'ronshoDailyGoalV1';
+  const WEEKLYGOAL_KEY = 'ronshoWeeklyGoalV1';
   const XP_KEY = 'ronshoXpV1';
   const ORPHANENTRYARCHIVE_KEY = 'ronshoOrphanEntryArchiveV1';
   const PRECEDENT_KEY = 'ronshoPrecedentsV1';
@@ -67,6 +68,7 @@
     dupResolved: '✅ 重複チェックの「両方残す」記録',
     speechDict: '🗣 読み方辞書',
     dailyGoal: '🎯 今日の目標値',
+    weeklyGoal: '🎯 週次目標値',
     xp: '🏆 経験値・レベル',
     precedents: '⚖️ 判例',
     books: '📖 書籍',
@@ -154,6 +156,7 @@
     speechDict: read(SPEECHDICT_KEY, []),
     dailyStats: read(DAILYSTATS_KEY, {}),
     dailyGoal: read(DAILYGOAL_KEY, null),
+    weeklyGoal: read(WEEKLYGOAL_KEY, null),
     xp: read(XP_KEY, 0),
     orphanEntryArchive: read(ORPHANENTRYARCHIVE_KEY, {}),
     precedents: read(PRECEDENT_KEY, []),
@@ -230,6 +233,7 @@
       write(SPEECHDICT_KEY, data.speechDict || []);
       write(DAILYSTATS_KEY, data.dailyStats || {});
       if (data.dailyGoal != null) write(DAILYGOAL_KEY, data.dailyGoal);
+      if (data.weeklyGoal != null) write(WEEKLYGOAL_KEY, data.weeklyGoal);
       write(XP_KEY, data.xp || 0);
       write(ORPHANENTRYARCHIVE_KEY, data.orphanEntryArchive || {});
       write(PRECEDENT_KEY, data.precedents || []);

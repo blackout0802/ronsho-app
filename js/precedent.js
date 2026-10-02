@@ -41,8 +41,15 @@ function precedentFilteredList() {
   if (precedentSubjectFilter !== 'all') {
     list = list.filter(p => (p.subject || '未設定') === precedentSubjectFilter);
   }
+  // 全文検索（判例名・判決日・科目・各本文欄が対象）
+  const q = (precedentSearchQuery || '').trim().toLowerCase();
+  if (q) {
+    list = list.filter(p => [p.name, p.date, p.subject, p.summary, p.holding, p.conclusion, p.feature, p.examMentions]
+      .some(v => (v || '').toLowerCase().includes(q)));
+  }
   return list;
 }
+let precedentSearchQuery = '';
 
 function renderPrecedentSubjectFilter() {
   const sel = document.getElementById('precedentSubjectFilter');
@@ -415,6 +422,14 @@ function initPrecedentFeature() {
 
   if (subjectFilterSel) subjectFilterSel.addEventListener('change', () => {
     precedentSubjectFilter = subjectFilterSel.value;
+    precedentIndex = 0;
+    precedentRevealed = false;
+    renderPrecedentPage();
+  });
+
+  const searchInput = document.getElementById('precedentSearchInput');
+  if (searchInput) searchInput.addEventListener('input', () => {
+    precedentSearchQuery = searchInput.value;
     precedentIndex = 0;
     precedentRevealed = false;
     renderPrecedentPage();

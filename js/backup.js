@@ -166,6 +166,7 @@ function restoreFromBackupPayload(data) {
   savePastExamLogs(Array.isArray(data.pastExamLogs) ? data.pastExamLogs : []);
   saveCountdowns(Array.isArray(data.countdowns) ? data.countdowns : []);
   if (data.dailyGoal) saveDailyGoal(data.dailyGoal);
+  if (data.weeklyGoal && typeof saveWeeklyGoal === 'function') saveWeeklyGoal(data.weeklyGoal);
   if (data.dailyStats && typeof data.dailyStats === 'object') saveDailyStats(data.dailyStats);
   if (typeof saveXp === 'function') saveXp(Number(data.xp) || 0);
   // 表示テーマ・ペット・各画面の既定フィルタなど、以前は端末ごとのローカル設定

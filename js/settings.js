@@ -24,6 +24,7 @@ const SHORTCUT_PAGE_LIST = [
   { id: 'pastExamPage', label: '📝 過去問ログ' },
   { id: 'precedentPage', label: '⚖️ 判例' },
   { id: 'bookPage', label: '📖 書籍' },
+  { id: 'lawStockPage', label: '📜 条文' },
   { id: 'settingsPage', label: '⚙️ その他' }
 ];
 const SHORTCUT_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -269,6 +270,21 @@ document.getElementById('dailyGoalInput').addEventListener('change', (evt) => {
 });
 registerSettingsPageRenderer(renderDailyGoalSettings);
 /* ▲▲▲ 新規追加：今日の目標設定 ここまで ▲▲▲ */
+/* ▼▼▼ 新規追加：週次目標設定 ここから ▼▼▼ */
+function renderWeeklyGoalSettings() {
+  const input = document.getElementById('weeklyGoalInput');
+  if (!input || typeof loadWeeklyGoal !== 'function') return;
+  input.value = loadWeeklyGoal();
+}
+document.getElementById('weeklyGoalInput').addEventListener('change', (evt) => {
+  const n = Math.min(9999, Math.max(1, Math.round(Number(evt.target.value)) || 70));
+  evt.target.value = n;
+  saveWeeklyGoal(n);
+  if (typeof renderGamificationPanel === 'function') renderGamificationPanel();
+  status.textContent = '🎯 週次目標を' + n + '問にしました。';
+});
+registerSettingsPageRenderer(renderWeeklyGoalSettings);
+/* ▲▲▲ 新規追加：週次目標設定 ここまで ▲▲▲ */
 function isTypingTarget(el) {
   if (!el) return false;
   const tag = el.tagName;

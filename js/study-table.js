@@ -60,7 +60,7 @@ function buildRowHtml(e, idx, showUndo, collapseBody, searchQuery) {
     + '<td>' + titleCellContent + '</td>'
     + '<td>' + bodyCellContent + '</td>'
     + '<td>' + buildYearHtml(e.year) + '</td>'
-    + '<td class="countCell">' + history.length + undoBtn + buildConfidenceTrendHtml(e.title) + '</td>'
+    + '<td class="countCell">' + history.length + undoBtn + buildConfidenceTrendHtml(e.title) + entryCorrectRateHtml(e.title) + '</td>'
     + '<td>' + (savedDate || '-') + '</td>'
     + '<td>' + reviewCell + '</td>'
     + '</tr>';
@@ -105,7 +105,57 @@ function renderStudyTable(data) {
   tableWrap.innerHTML = html;
   searchCountStudy.textContent = searchQueryStudy ? total + '件見つかりました' : '';
   renderProgressSummary();
+  renderReviewQueue();
 }
+// 論証ごとの正答率（◎○の割合）。confidenceHistory の積み上げから算出する
+function entryCorrectRateHtml(title) {
+  const log = studyLog[title];
+  const hist = (log && log.confidenceHistory) || [];
+  if (hist.length === 0) return '';
+  const correct = hist.filter(h => h.level === 'good' || h.level === 'perfect').length;
+  return '<div class="correctRate" title="◎○の割合（通算' + hist.length + '回の回答）">正答率' + Math.round((correct / hist.length) * 100) + '%</div>';
+}
+// ▼▼▼ 復習キュー：3日以内に復習推奨日が来る未暗記の論点を集め、
+// そのまま問題演習を開始できるようにする（専用データは持たない） ▼▼▼
+const REVIEW_QUEUE_DAYS = 3;
+const REVIEW_QUEUE_DISPLAY_LIMIT = 10;
+function getReviewQueue() {
+  const until = addDays(todayStr(), REVIEW_QUEUE_DAYS);
+  const items = [];
+  entries.forEach(e => {
+    if (studyLog[e.title] && studyLog[e.title].memorized) return;
+    const info = getNextReviewInfo(e.title);
+    if (info && info.nextDateStr <= until) {
+      items.push({ title: e.title, subject: e.subject, category: e.category, nextDate: info.nextDateStr, overdue: info.nextDateStr <= todayStr() });
+    }
+  });
+  items.sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  return items;
+}
+function renderReviewQueue() {
+  const el = document.getElementById('reviewQueueCard');
+  if (!el) return;
+  if (entries.length === 0) { el.innerHTML = ''; return; }
+  const items = getReviewQueue();
+  if (items.length === 0) {
+    el.innerHTML = '<div class="reviewQueueCard"><div class="weaknessGood">🎉 ' + REVIEW_QUEUE_DAYS + '日以内に復習予定の論点はありません。</div></div>';
+    return;
+  }
+  const overdueCount = items.filter(i => i.overdue).length;
+  el.innerHTML = '<div class="reviewQueueCard">'
+    + '<div class="weaknessTitle">⏰ 復習キュー（' + REVIEW_QUEUE_DAYS + '日以内 ' + items.length + '件／期限超過' + overdueCount + '件）</div>'
+    + items.slice(0, REVIEW_QUEUE_DISPLAY_LIMIT).map(i => '<div class="weaknessRow">'
+      + '<span class="weaknessSubject">' + getSubjectEmoji(i.subject) + ' ' + escapeHtml(i.title) + '</span>'
+      + '<span class="weaknessStats">' + (i.overdue ? '期限超過' : '推奨日' + i.nextDate) + '</span>'
+      + '</div>').join('')
+    + (items.length > REVIEW_QUEUE_DISPLAY_LIMIT ? '<div class="weaknessNote">他' + (items.length - REVIEW_QUEUE_DISPLAY_LIMIT) + '件</div>' : '')
+    + '<button type="button" id="reviewQueueStartBtn">▶ この' + items.length + '件で演習する</button>'
+    + '</div>';
+  document.getElementById('reviewQueueStartBtn').addEventListener('click', () => {
+    startQuizWithTitles(items.map(i => i.title));
+  });
+}
+// ▲▲▲ 復習キュー ここまで ▲▲▲
 function getCsvFilteredEntries() {
   const unmemorized = entries.filter(e => !(studyLog[e.title] && studyLog[e.title].memorized));
   if (selectedCsvSubject === 'all') return unmemorized;

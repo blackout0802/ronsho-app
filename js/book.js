@@ -111,9 +111,15 @@ function bookDisplayTitle(b) {
 function bookFilteredList() {
   const list = books.slice();
   const filtered = bookSubjectFilter === 'all' ? list : list.filter(b => (b.subject || '未設定') === bookSubjectFilter);
-  filtered.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
-  return filtered;
+  // 全文検索（書籍名・科目・メモが対象）
+  const q = (bookSearchQuery || '').trim().toLowerCase();
+  const searched = q
+    ? filtered.filter(b => [b.title, b.subject, b.memo].some(v => (v || '').toLowerCase().includes(q)))
+    : filtered;
+  searched.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
+  return searched;
 }
+let bookSearchQuery = '';
 function renderBookSubjectFilter() {
   const sel = document.getElementById('bookSubjectFilter');
   if (!sel) return;
@@ -128,6 +134,38 @@ function renderBookSubjectFilter() {
   bookSubjectFilter = sel.value;
 }
 
+// 関連論証ピッカー：書籍の科目に属する論証をチェックボックスで選ぶ。
+// 表示が重くならないよう100件で打ち切る
+const BOOK_ENTRY_PICKER_LIMIT = 100;
+// チェック状態はDOMではなくこのSetで保持する（絞り込みで候補から
+// 外れた論証の選択が、再描画で消えてしまわないようにするため）
+let bookEntryPickerSelected = new Set();
+function bookEntryPickerCandidates() {
+  const subject = (document.getElementById('bookSubjectInput') || {}).value || '';
+  const trimmed = subject.trim();
+  const q = ((document.getElementById('bookEntrySearchInput') || {}).value || '').trim().toLowerCase();
+  let list = entries.slice();
+  if (trimmed) list = list.filter(e => (e.subject || '') === trimmed);
+  if (q) list = list.filter(e => (e.title || '').toLowerCase().includes(q));
+  return list;
+}
+function renderBookEntryPicker() {
+  const listEl = document.getElementById('bookEntryPickerList');
+  if (!listEl) return;
+  const candidates = bookEntryPickerCandidates();
+  const shown = candidates.slice(0, BOOK_ENTRY_PICKER_LIMIT);
+  const hiddenSelected = [...bookEntryPickerSelected].filter(t => !candidates.some(e => e.title === t));
+  listEl.innerHTML = shown.map(e =>
+    '<label class="bookEntryCheckLabel"><input type="checkbox" class="bookEntryCheck" value="' + escapeHtml(e.title) + '"'
+    + (bookEntryPickerSelected.has(e.title) ? ' checked' : '') + '> ' + escapeHtml(e.title) + '</label>'
+  ).join('')
+    + (candidates.length > shown.length
+      ? '<div class="past-log-small-note">他' + (candidates.length - shown.length) + '件（タイトル検索で絞り込めます）</div>'
+      : (candidates.length === 0 ? '<div class="past-log-small-note">該当する論証がありません。</div>' : ''))
+    + (hiddenSelected.length > 0
+      ? '<div class="past-log-small-note">🔗 他' + hiddenSelected.length + '件を選択中（絞り込みで非表示）</div>'
+      : '');
+}
 function renderBookCoverPreview() {
   const preview = document.getElementById('bookCoverPreview');
   if (!preview) return;
@@ -178,9 +216,16 @@ function renderBookPage() {
       + '<div class="bookProgressBarRow"><div class="gamiBarOuter"><div class="gamiBarInner" style="width:' + pct + '%;"></div></div>'
       + '<span class="bookProgressPct">' + pct + '%</span></div>'
       + (b.memo ? '<div class="bookMemoRow">' + escapeHtml(b.memo).replace(/\n/g, '<br>') + '</div>' : '')
+      + (Array.isArray(b.entryTitles) && b.entryTitles.length > 0
+        ? '<div class="bookLinkedRow">🔗 関連論証 ' + b.entryTitles.length + '件'
+          + '（' + b.entryTitles.slice(0, 3).map(t => escapeHtml(t)).join('、') + (b.entryTitles.length > 3 ? '…ほか' : '') + '）</div>'
+        : '')
       + '<div class="bookActionsRow">'
       + '<button type="button" class="bookEditBtn" data-id="' + escapeHtml(b.id) + '">✏️ 編集</button>'
       + '<button type="button" class="bookDeleteBtn" data-id="' + escapeHtml(b.id) + '">🗑️ 削除</button>'
+      + (Array.isArray(b.entryTitles) && b.entryTitles.length > 0
+        ? '<button type="button" class="bookQuizBtn" data-id="' + escapeHtml(b.id) + '">▶ 範囲で演習</button>'
+        : '')
       + '</div>'
       + '</div>'
       + '</div>';
@@ -206,7 +251,11 @@ function resetBookForm() {
   if (coverInput) coverInput.value = '';
   const saveBtn = document.getElementById('bookSaveBtn');
   if (saveBtn) saveBtn.textContent = '保存する';
+  const entrySearch = document.getElementById('bookEntrySearchInput');
+  if (entrySearch) entrySearch.value = '';
+  bookEntryPickerSelected = new Set();
   renderBookCoverPreview();
+  renderBookEntryPicker();
 }
 
 function openBookFormForEdit(b) {
@@ -229,6 +278,10 @@ function openBookFormForEdit(b) {
   if (coverInput) coverInput.value = '';
   const saveBtn = document.getElementById('bookSaveBtn');
   if (saveBtn) saveBtn.textContent = '更新する';
+  const entrySearch = document.getElementById('bookEntrySearchInput');
+  if (entrySearch) entrySearch.value = '';
+  bookEntryPickerSelected = new Set(b.entryTitles || []);
+  renderBookEntryPicker();
   const form = document.getElementById('bookForm');
   if (form && !form.classList.contains('pastLogFormOpen')) {
     form.classList.add('pastLogFormOpen');
@@ -305,12 +358,13 @@ function initBookFeature() {
       progress = Math.max(0, Math.min(100, Math.round((currentPage / totalPages) * 100)));
     }
     const now = new Date().toISOString();
+    const entryTitles = [...bookEntryPickerSelected];
     if (bookEditingId) {
       const idx = books.findIndex(b => b.id === bookEditingId);
       if (idx !== -1) {
         const prev = books[idx];
         books[idx] = {
-          ...prev, title, subject, startDate, endDate, currentPage, totalPages, progress, memo,
+          ...prev, title, subject, startDate, endDate, currentPage, totalPages, progress, memo, entryTitles,
           cover: bookPendingCover === null ? (prev.cover || null) : (bookPendingCover || null),
           updatedAt: now
         };
@@ -319,7 +373,7 @@ function initBookFeature() {
     } else {
       books.push({
         id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-        title, subject, startDate, endDate, currentPage, totalPages, progress, memo,
+        title, subject, startDate, endDate, currentPage, totalPages, progress, memo, entryTitles,
         cover: bookPendingCover || null,
         createdAt: now, updatedAt: now
       });
@@ -343,6 +397,27 @@ function initBookFeature() {
     renderBookPage();
   });
 
+  const bookSearchInput = document.getElementById('bookSearchInput');
+  if (bookSearchInput) bookSearchInput.addEventListener('input', () => {
+    bookSearchQuery = bookSearchInput.value;
+    renderBookPage();
+  });
+
+  // 関連論証ピッカーの絞り込み（科目入力・タイトル検索で候補を更新）。
+  // チェック状態は bookEntryPickerSelected（JS側）で保持する。
+  // ピッカー内のチェック変更もここで集約する（再描画しても消えない）
+  const bookSubjectInput = document.getElementById('bookSubjectInput');
+  const bookEntrySearchInput = document.getElementById('bookEntrySearchInput');
+  const bookEntryPickerList = document.getElementById('bookEntryPickerList');
+  if (bookSubjectInput) bookSubjectInput.addEventListener('input', renderBookEntryPicker);
+  if (bookEntrySearchInput) bookEntrySearchInput.addEventListener('input', renderBookEntryPicker);
+  if (bookEntryPickerList) bookEntryPickerList.addEventListener('change', (e) => {
+    const chk = e.target.closest('.bookEntryCheck');
+    if (!chk) return;
+    if (chk.checked) bookEntryPickerSelected.add(chk.value);
+    else bookEntryPickerSelected.delete(chk.value);
+  });
+
   if (area) area.addEventListener('click', (e) => {
     const editBtn = e.target.closest('.bookEditBtn');
     if (editBtn) {
@@ -360,6 +435,13 @@ function initBookFeature() {
       saveBooks();
       renderBookPage();
       status.textContent = '🗑️ 「' + bookDisplayTitle(b) + '」を削除しました。';
+      return;
+    }
+    const quizBtn = e.target.closest('.bookQuizBtn');
+    if (quizBtn) {
+      const b = books.find(x => x.id === quizBtn.dataset.id);
+      if (!b || !Array.isArray(b.entryTitles) || b.entryTitles.length === 0) return;
+      if (typeof startQuizWithTitles === 'function') startQuizWithTitles(b.entryTitles);
     }
   });
 
