@@ -1888,7 +1888,13 @@ html { scrollbar-gutter: stable; }
 .lawRefInlineClose { cursor: pointer; padding: 0 4px; }
 .lawRefInlineFoot { margin-top: 6px; font-size: 11px; color: #64748b; }
 /* ▲▲▲ 条文参照リンク・ポップアップ ここまで ▲▲▲ */
-/* ▼▼▼ 連続学習カード・問題演習の入力あり表示 ▼▼▼ */
+/* ▼▼▼ 連続学習カード・問題演習のツールチップ ▼▼▼ */
 .gamiStreakValue { font-size: 22px; font-weight: 800; color: #ea580c; }
-.quizCardMarked { background-color: rgba(251, 191, 36, 0.12); border: 2px solid #fbbf24; }
-/* ▲▲▲ 連続学習カード・問題演習の入力あり表示 ここまで ▲▲▲ */
+.toolChipsRow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0 2px; }
+.toolChip {
+  display: inline-block; font-size: 12px; font-weight: 700; cursor: pointer;
+  border: 1px solid #0057e7; color: #0057e7; background: #fff;
+  border-radius: 999px; padding: 3px 12px;
+}
+.toolChip:active { background: #0057e7; color: #fff; }
+/* ▲▲▲ 連続学習カード・問題演習のツールチップ ここまで ▲▲▲ */

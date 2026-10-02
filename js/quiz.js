@@ -181,11 +181,13 @@ function renderQuizPage() {
   const quizMemo = (studyLog[e.title] && studyLog[e.title].memo) || '';
   const isBookmarked = !!(studyLog[e.title] && studyLog[e.title].bookmarked);
   if (quizToolsMenuOpenTitle !== e.title) { quizToolsMenuOpen = false; quizToolsMenuOpenTitle = e.title; }
-  // 右上「⋮」メニューの🔖・🗒️・⏭️のいずれかが設定済みなら、カードの
-  // 背景を変えて一目で分かるようにする
-  const hasToolInput = isBookmarked || !!quizMemo || isSkipped;
-  let html = '<div class="quizCard' + (hasToolInput ? ' quizCardMarked' : '') + '"'
-    + (hasToolInput ? ' title="ブックマーク・メモ・スキップのいずれかが設定されています"' : '') + '>';
+  // 右上「⋮」メニューの🔖・🗒️・⏭️のいずれかが設定済みなら、
+  // タイトル横にチップを表示する。チップを押すとその内容に遷移する
+  const toolChips = [];
+  if (isBookmarked) toolChips.push('<span class="toolChip" data-chip="bookmark" title="論証一覧をブックマーク絞り込みで開く">🔖 ブックマーク</span>');
+  if (quizMemo) toolChips.push('<span class="toolChip" data-chip="memo" title="メモを確認・編集する">🗒️ メモあり</span>');
+  if (isSkipped) toolChips.push('<span class="toolChip" data-chip="skip" title="スキップのみの問題演習を開く">⏭️ スキップ中</span>');
+  let html = '<div class="quizCard">';
   if (quizComboCount >= 2) {
     html += '<div class="quizCombo">🔥 ' + quizComboCount + '連続できた！</div>';
   }
@@ -217,6 +219,9 @@ function renderQuizPage() {
     html += buildBodyEditorHtml(e, idx);
   } else {
   html += '<div class="quizTitle">' + buildImportanceStarsHtml(e.importance) + escapeHtml(e.title) + '</div>';
+  if (toolChips.length > 0) {
+    html += '<div class="toolChipsRow">' + toolChips.join('') + '</div>';
+  }
   if (!quizRevealed) {
     html += '<div class="quizShowBtn" id="quizShowBtn">📖 本文を表示</div>';
   } else {
@@ -264,8 +269,26 @@ function renderQuizPage() {
     const allRevealed = Array.from(spans).every(s => s.classList.contains('revealed'));
     spans.forEach(s => s.classList.toggle('revealed', !allRevealed));
   });
-  const showBtn = document.getElementById('quizShowBtn');
-  if (showBtn) {
+  quizArea.querySelectorAll('.toolChip').forEach(chip => chip.addEventListener('click', (evt) => {
+    evt.stopPropagation();
+    const kind = chip.dataset.chip;
+    const idx = entries.findIndex(x => x.title === e.title);
+    if (kind === 'bookmark') {
+      starFilterMode = 'bookmarked';
+      renderSubjectTabs();
+      renderStudyTable(entries);
+      const tabBtn = document.querySelector('.tabBtn[data-page="entryListPage"]');
+      if (tabBtn) tabBtn.click();
+    } else if (kind === 'memo') {
+      if (idx !== -1) editMemo(idx);
+      renderQuizPage();
+    } else if (kind === 'skip') {
+      if (quizSkippedOnlyChk) quizSkippedOnlyChk.checked = true;
+      startQuiz();
+      window.scrollTo(0, 0);
+    }
+  }));
+  const showBtn = document.getElementById('quizShowBtn');  if (showBtn) {
     showBtn.addEventListener('click', () => {
       quizRevealed = true;
       renderQuizPage();
