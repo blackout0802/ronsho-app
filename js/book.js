@@ -92,6 +92,16 @@ function bookEffectiveProgress(b) {
   const p = Number(b.progress);
   return Number.isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
 }
+function bookStudyMinutesLabel(b) {
+  const m = Math.max(0, Math.round(Number(b.studyMinutes) || 0));
+  if (m <= 0) return '';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return (h > 0 ? h + '時間' : '') + (r > 0 || h === 0 ? r + '分' : '');
+}
+function updateBookRangeFill(range) {
+  if (range) range.style.setProperty('--pct', range.value + '%');
+}
 function bookPeriodLabel(b) {
   const s = b.startDate || '';
   const e = b.endDate || '';
@@ -212,6 +222,7 @@ function renderBookPage() {
       + '<div class="bookTitleRow">' + escapeHtml(bookDisplayTitle(b)) + '</div>'
       + '<div class="bookMetaRow">' + escapeHtml(b.subject || '未設定') + '</div>'
       + (period ? '<div class="bookPeriodRow">🗓 ' + escapeHtml(period) + '</div>' : '')
+      + (bookStudyMinutesLabel(b) ? '<div class="bookStudyTimeRow">⏱ 勉強時間 ' + bookStudyMinutesLabel(b) + '</div>' : '')
       + (pagesLabel ? '<div class="bookPagesRow">📄 ' + escapeHtml(pagesLabel) + '</div>' : '')
       + '<div class="bookProgressBarRow"><div class="gamiBarOuter"><div class="gamiBarInner" style="width:' + pct + '%;"></div></div>'
       + '<span class="bookProgressPct">' + pct + '%</span></div>'
@@ -236,7 +247,7 @@ function resetBookForm() {
   bookEditingId = null;
   bookPendingCover = null;
   const ids = ['bookTitleInput', 'bookSubjectInput', 'bookStartInput', 'bookEndInput',
-    'bookCurrentPageInput', 'bookTotalPagesInput', 'bookMemoInput'];
+    'bookCurrentPageInput', 'bookTotalPagesInput', 'bookStudyHoursInput', 'bookStudyMinsInput', 'bookMemoInput'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -246,6 +257,7 @@ function resetBookForm() {
     range.value = '0';
     const label = document.getElementById('bookProgressLabel');
     if (label) label.textContent = '0%';
+    updateBookRangeFill(range);
   }
   const coverInput = document.getElementById('bookCoverInput');
   if (coverInput) coverInput.value = '';
@@ -267,9 +279,13 @@ function openBookFormForEdit(b) {
   document.getElementById('bookEndInput').value = b.endDate || '';
   document.getElementById('bookCurrentPageInput').value = b.currentPage !== '' && b.currentPage != null ? b.currentPage : '';
   document.getElementById('bookTotalPagesInput').value = b.totalPages !== '' && b.totalPages != null ? b.totalPages : '';
+  const studyMin = Math.max(0, Math.round(Number(b.studyMinutes) || 0));
+  document.getElementById('bookStudyHoursInput').value = studyMin > 0 ? Math.floor(studyMin / 60) : '';
+  document.getElementById('bookStudyMinsInput').value = studyMin > 0 ? studyMin % 60 : '';
   const range = document.getElementById('bookProgressRange');
   if (range) {
     range.value = String(bookEffectiveProgress(b));
+    updateBookRangeFill(range);
     const label = document.getElementById('bookProgressLabel');
     if (label) label.textContent = range.value + '%';
   }
@@ -313,7 +329,9 @@ function initBookFeature() {
   if (range) range.addEventListener('input', () => {
     const label = document.getElementById('bookProgressLabel');
     if (label) label.textContent = range.value + '%';
+    updateBookRangeFill(range);
   });
+  updateBookRangeFill(range);
 
   if (coverInput) coverInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -343,6 +361,8 @@ function initBookFeature() {
     const currentPageRaw = document.getElementById('bookCurrentPageInput').value;
     const totalPagesRaw = document.getElementById('bookTotalPagesInput').value;
     const memo = document.getElementById('bookMemoInput').value.trim();
+    const studyMinutes = Math.max(0, Math.round(Number(document.getElementById('bookStudyHoursInput').value) || 0)) * 60
+      + Math.max(0, Math.round(Number(document.getElementById('bookStudyMinsInput').value) || 0));
     if (!title) {
       alert('書籍名を入力してください。');
       return;
@@ -364,7 +384,7 @@ function initBookFeature() {
       if (idx !== -1) {
         const prev = books[idx];
         books[idx] = {
-          ...prev, title, subject, startDate, endDate, currentPage, totalPages, progress, memo, entryTitles,
+          ...prev, title, subject, startDate, endDate, currentPage, totalPages, studyMinutes, progress, memo, entryTitles,
           cover: bookPendingCover === null ? (prev.cover || null) : (bookPendingCover || null),
           updatedAt: now
         };
@@ -373,7 +393,7 @@ function initBookFeature() {
     } else {
       books.push({
         id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-        title, subject, startDate, endDate, currentPage, totalPages, progress, memo, entryTitles,
+        title, subject, startDate, endDate, currentPage, totalPages, studyMinutes, progress, memo, entryTitles,
         cover: bookPendingCover || null,
         createdAt: now, updatedAt: now
       });

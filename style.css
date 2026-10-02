@@ -1823,6 +1823,11 @@ table.pastMatrixTable th, table.pastMatrixTable td {
 .bookCoverPlaceholder { font-size: 32px; }
 .bookCoverActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .bookFormActionsRow { display: flex; gap: 12px; align-items: center; }
+#bookProgressRange { -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; cursor: pointer;
+  background: linear-gradient(to right, #0057e7 0%, #0057e7 var(--pct, 0%), #d5dbe6 var(--pct, 0%), #d5dbe6 100%); }
+#bookProgressRange::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 8px; height: 18px; border-radius: 4px; background: #0057e7; border: none; }
+#bookProgressRange::-moz-range-thumb { width: 8px; height: 18px; border-radius: 4px; background: #0057e7; border: none; }
+.bookStudyTimeRow { font-size: 12px; color: #444; margin: 2px 0; }
 .bookProgressSliderRow { display: inline-flex; align-items: center; gap: 6px; }
 .bookCard { display: flex; gap: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #dbe4f0; border-radius: 10px; background: var(--card-bg, #fff); }
 .bookCoverCell { width: 72px; flex-shrink: 0; }
