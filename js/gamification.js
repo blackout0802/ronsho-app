@@ -163,6 +163,34 @@ function getLevelInfo(xp) {
   }
   return { level: level, xpIntoLevel: xp - threshold, xpForThisLevel: need, xp: xp };
 }
+// 連続学習日数。自動記録＋手動記録＋過去問ログのいずれかがある日を
+// 「学習した日」とする（カレンダーの日別集計と同じ数え方）。
+// 今日未学習の場合は昨日までの連続数を返し、今日の分で伸ばせる旨を表示する
+function getAllStudyActivityCounts() {
+  const counts = (typeof getDailyStudyCounts === 'function') ? Object.assign({}, getDailyStudyCounts()) : {};
+  if (typeof loadPastExamLogs === 'function') {
+    try {
+      loadPastExamLogs().forEach(l => {
+        if (l && l.date) counts[l.date] = (counts[l.date] || 0) + 1;
+      });
+    } catch (e) {}
+  }
+  return counts;
+}
+function computeStudyStreak() {
+  const counts = getAllStudyActivityCounts();
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const todayDone = (counts[formatLocalDate(d)] || 0) > 0;
+  if (!todayDone) d.setDate(d.getDate() - 1);
+  let streak = 0;
+  while ((counts[formatLocalDate(d)] || 0) > 0) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+    if (streak > 3650) break;
+  }
+  return { streak: streak, todayDone: todayDone };
+}
 function getTodayStudiedCount() {
   const today = todayStr();
   // カレンダーの学習件数（getAllStudyDates）と同じ数え方にする。
@@ -223,6 +251,18 @@ function renderGamificationPanel() {
   const goal = loadDailyGoal();
   const goalPct = goal > 0 ? Math.min(100, Math.round((todayCount / goal) * 100)) : 0;
   const growth = getGrowthToday();
+  const streakInfo = (typeof computeStudyStreak === 'function') ? computeStudyStreak() : { streak: 0, todayDone: false };
+  let streakSub;
+  if (streakInfo.streak === 0) {
+    streakSub = '今日1問でスタート';
+  } else if (streakInfo.todayDone) {
+    streakSub = '今日も学習済み！';
+  } else {
+    streakSub = '今日の分でさらに更新';
+  }
+  const streakHtml = '<div class="gamiCard gamiStreakCard"><div class="gamiCardTitle">🔥 連続学習</div>'
+    + '<div class="gamiStreakValue">' + streakInfo.streak + '日</div>'
+    + '<div class="gamiCardSub">' + streakSub + '</div></div>';
   let growthHtml;
   if (!growth) {
     growthHtml = '<div class="gamiCardTitle">📈 今日の伸びしろ</div><div class="gamiCardSub">記録は明日から表示されます</div>';
@@ -243,7 +283,8 @@ function renderGamificationPanel() {
     + '<div class="gamiRing" style="background: conic-gradient(#0057e7 ' + goalPct + '%, #e6edf7 ' + goalPct + '% 100%);"><div class="gamiRingInner">' + todayCount + ' / ' + goal + '</div></div>'
     + '<div class="gamiCardTitle">🎯 今日の目標</div>'
     + '</div>'
-    + '<div class="gamiCard gamiGrowthCard">' + growthHtml + '</div>';
+    + '<div class="gamiCard gamiGrowthCard">' + growthHtml + '</div>'
+    + streakHtml;
 }
 
 const BADGE_DEFS = [

@@ -181,7 +181,11 @@ function renderQuizPage() {
   const quizMemo = (studyLog[e.title] && studyLog[e.title].memo) || '';
   const isBookmarked = !!(studyLog[e.title] && studyLog[e.title].bookmarked);
   if (quizToolsMenuOpenTitle !== e.title) { quizToolsMenuOpen = false; quizToolsMenuOpenTitle = e.title; }
-  let html = '<div class="quizCard">';
+  // 右上「⋮」メニューの🔖・🗒️・⏭️のいずれかが設定済みなら、カードの
+  // 背景を変えて一目で分かるようにする
+  const hasToolInput = isBookmarked || !!quizMemo || isSkipped;
+  let html = '<div class="quizCard' + (hasToolInput ? ' quizCardMarked' : '') + '"'
+    + (hasToolInput ? ' title="ブックマーク・メモ・スキップのいずれかが設定されています"' : '') + '>';
   if (quizComboCount >= 2) {
     html += '<div class="quizCombo">🔥 ' + quizComboCount + '連続できた！</div>';
   }
