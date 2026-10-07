@@ -180,36 +180,63 @@ function lawrefBuildArticleUrl(lid, num, branch) {
     : 'lawNum=' + encodeURIComponent(law.lawNum);
   return base + lawPart + ';article=' + encodeURIComponent(articleParam);
 }
-// e-Govの条文XML（DOMParser用）を {caption, title, paras:[{label, text}]} に整形する。
+// e-Govの条文XML（DOMParser用）を
+// {v, caption, title, paras:[{num, label, text, items:[{label, text, children}]}]} に整形する。
+// 項（Paragraph）の下の号（Item）・号の細分（Subitem1〜）も入れ子のまま保持する。
 // XML構造の取得自体は lawrefGetArticle が行い、ここは整形だけに専念する
+const LAWREF_FORMAT_VERSION = 2;
+function lawrefChildEls(el, pred) {
+  const out = [];
+  for (let c = el.firstChild; c; c = c.nextSibling) {
+    if (c.nodeType === 1 && pred(c.tagName)) out.push(c);
+  }
+  return out;
+}
+function lawrefOwnText(el, tagPred) {
+  const hit = lawrefChildEls(el, tagPred)[0];
+  return hit ? (hit.textContent || '').trim() : '';
+}
+// 号（Item）・細分（Subitem1〜）を再帰的に読む
+function lawrefParseItems(parentEl) {
+  const isItem = t => t === 'Item' || /^Subitem\d+$/.test(t);
+  return lawrefChildEls(parentEl, isItem).map(el => ({
+    label: lawrefOwnText(el, t => /Title$/.test(t)),
+    text: lawrefOwnText(el, t => /Sentence$/.test(t)),
+    children: lawrefParseItems(el)
+  }));
+}
 function lawrefFormatArticleDoc(doc) {
-  const textOf = (el, tag) => {
-    const els = el.getElementsByTagName(tag);
-    return els.length > 0 ? (els[0].textContent || '').trim() : '';
-  };
   const articles = doc.getElementsByTagName('Article');
   if (articles.length === 0) return null;
   const articleEl = articles[articles.length - 1];
-  const paras = [];
-  const paraEls = articleEl.getElementsByTagName('Paragraph');
-  for (let i = 0; i < paraEls.length; i++) {
-    const numLabel = textOf(paraEls[i], 'ParagraphNum');
-    const sentences = [];
-    const sentenceEls = paraEls[i].getElementsByTagName('Sentence');
-    for (let j = 0; j < sentenceEls.length; j++) {
-      const t = (sentenceEls[j].textContent || '').trim();
-      if (t) sentences.push(t);
-    }
-    const text = sentences.join('');
-    if (text) paras.push({ label: numLabel, text: text });
-  }
+  const paras = lawrefChildEls(articleEl, t => t === 'Paragraph').map((el, i) => ({
+    num: Number(el.getAttribute('Num')) || (i + 1),
+    label: lawrefOwnText(el, t => t === 'ParagraphNum'),
+    text: lawrefOwnText(el, t => t === 'ParagraphSentence'),
+    items: lawrefParseItems(el)
+  })).filter(p => p.text || p.items.length > 0);
   if (paras.length === 0) return null;
-  return { caption: textOf(articleEl, 'ArticleCaption'), title: textOf(articleEl, 'ArticleTitle'), paras: paras };
+  return {
+    v: LAWREF_FORMAT_VERSION,
+    caption: lawrefOwnText(articleEl, t => t === 'ArticleCaption'),
+    title: lawrefOwnText(articleEl, t => t === 'ArticleTitle'),
+    paras: paras
+  };
 }
 async function lawrefGetArticle(lid, num, branch) {
   const key = lawrefCacheKey(lid, num, branch);
   const cache = lawrefLoadCache();
-  if (cache[key]) return Object.assign({ cached: true }, cache[key]);
+  const hit = cache[key];
+  if (hit && hit.v === LAWREF_FORMAT_VERSION) return Object.assign({ cached: true }, hit);
+  // 号などを含まない旧形式のキャッシュは取得し直す（オフライン等で失敗したら旧形式のまま表示）
+  try {
+    return await lawrefFetchArticle(key, cache, lid, num, branch);
+  } catch (e) {
+    if (hit) return Object.assign({ cached: true }, hit);
+    throw e;
+  }
+}
+async function lawrefFetchArticle(key, cache, lid, num, branch) {
   const res = await fetch(lawrefBuildArticleUrl(lid, num, branch));
   if (!res.ok) throw new Error('条文の取得に失敗しました（HTTP ' + res.status + '）');
   const xml = await res.text();
@@ -225,14 +252,25 @@ async function lawrefGetArticle(lid, num, branch) {
   lawrefSaveCache(cache);
   return Object.assign({ cached: false }, entry);
 }
-function lawrefArticleBodyHtml(data) {
+function lawrefItemsHtml(items, depth) {
+  if (!items || items.length === 0) return '';
+  return items.map(it => '<div class="lawRefItem lawRefItemDepth' + Math.min(depth, 3) + '">'
+    + (it.label ? '<span class="lawRefParaNum">' + escapeHtml(it.label) + '</span>' : '')
+    + escapeHtml(it.text) + '</div>' + lawrefItemsHtml(it.children, depth + 1)).join('');
+}
+// hitPara：「民法90条第2項」のように項が指定された参照の項番号（その項を強調表示する）
+function lawrefArticleBodyHtml(data, hitPara) {
   let html = '';
   if (data.caption) html += '<div class="lawRefCaption">' + escapeHtml(data.caption) + '</div>';
   if (data.title) html += '<div class="lawRefTitle">' + escapeHtml(data.title) + '</div>';
-  html += data.paras.map(p => '<div class="lawRefPara">'
+  html += data.paras.map(p => '<div class="lawRefPara' + (hitPara && p.num === hitPara ? ' lawRefParaHit' : '') + '" data-para="' + p.num + '">'
     + (p.label ? '<span class="lawRefParaNum">' + escapeHtml(p.label) + '</span>' : '')
-    + escapeHtml(p.text) + '</div>').join('');
+    + escapeHtml(p.text) + '</div>' + lawrefItemsHtml(p.items, 1)).join('');
   return html;
+}
+function lawrefScrollToHit(container) {
+  const hit = container && container.querySelector('.lawRefParaHit');
+  if (hit && hit.scrollIntoView) hit.scrollIntoView({ block: 'nearest' });
 }
 
 // --- 表示（ポップアップ／その場に展開の2方式） ---
@@ -256,6 +294,7 @@ function openLawRefPopup(ref) {
   const lid = ref.getAttribute('data-lid');
   const num = Number(ref.getAttribute('data-num'));
   const branch = ref.getAttribute('data-branch') ? Number(ref.getAttribute('data-branch')) : null;
+  const para = ref.getAttribute('data-para') ? Number(ref.getAttribute('data-para')) : null;
   root.innerHTML = '<div class="lawModalOverlay" id="lawModalOverlay">'
     + '<div class="lawModalBox">'
     + '<div class="lawModalHeader"><span>📜 ' + escapeHtml(label) + '</span><span class="lawModalCloseBtn" id="lawModalCloseBtn">✖</span></div>'
@@ -267,7 +306,8 @@ function openLawRefPopup(ref) {
     const body = document.getElementById('lawModalBody');
     const foot = document.getElementById('lawModalFoot');
     if (!body) return;
-    body.innerHTML = lawrefArticleBodyHtml(data);
+    body.innerHTML = lawrefArticleBodyHtml(data, para);
+    lawrefScrollToHit(body);
     if (foot) foot.textContent = lawrefSourceNote(data);
   }).catch(err => {
     const body = document.getElementById('lawModalBody');
@@ -287,6 +327,7 @@ function toggleLawRefInline(ref) {
   const num = Number(ref.getAttribute('data-num'));
   const branch = ref.getAttribute('data-branch') ? Number(ref.getAttribute('data-branch')) : null;
   const label = ref.getAttribute('data-label') || '条文';
+  const para = ref.getAttribute('data-para') ? Number(ref.getAttribute('data-para')) : null;
   const key = lawrefCacheKey(lid, num, branch);
   const next = ref.nextSibling;
   if (next && next.classList && next.classList.contains('lawRefInline') && next.getAttribute('data-key') === key) {
@@ -306,7 +347,7 @@ function toggleLawRefInline(ref) {
   });
   lawrefGetArticle(lid, num, branch).then(data => {
     if (!box.isConnected) return;
-    box.querySelector('.lawRefInlineBody').innerHTML = lawrefArticleBodyHtml(data);
+    box.querySelector('.lawRefInlineBody').innerHTML = lawrefArticleBodyHtml(data, para);
     box.querySelector('.lawRefInlineFoot').textContent = lawrefSourceNote(data);
   }).catch(err => {
     if (!box.isConnected) return;

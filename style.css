@@ -1888,6 +1888,10 @@ html { scrollbar-gutter: stable; }
 .lawRefTitle { font-weight: 700; margin-bottom: 6px; }
 .lawRefPara { margin-bottom: 4px; }
 .lawRefParaNum { font-weight: 700; margin-right: 4px; }
+.lawRefParaHit { background: rgba(255, 213, 79, 0.28); border-radius: 4px; padding: 0 4px; }
+.lawRefItem { margin-bottom: 2px; padding-left: 1.2em; }
+.lawRefItemDepth2 { padding-left: 2.4em; }
+.lawRefItemDepth3 { padding-left: 3.6em; }
 .lawRefInline {
   margin: 8px 0; padding: 10px 12px; border: 1px solid #bcd3f5; border-radius: 8px;
   background: #f2f7ff; font-size: 13px; line-height: 1.9;
