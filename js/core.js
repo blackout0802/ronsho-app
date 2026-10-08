@@ -736,6 +736,8 @@ function extractEntries(paraRuns) {
     if (isTitleLine(paraRuns[i])) {
       const { title, yearTokensColored, importance } = parseTitleLineRuns(paraRuns[i]);
       const yearStr = buildFilteredYearStr(yearTokensColored);
+      // 見出し行に #f92269 で書かれた文字（例：趣旨182,合格173）は出典として自動登録する
+      const sourceStr = buildSourceFromTokens(yearTokensColored);
       i++;
       let bodyLines = [];
       let bodyRunLines = [];
@@ -754,7 +756,9 @@ function extractEntries(paraRuns) {
       const body = bodyLines.join('\n');
       const bodyHtml = buildBodyHtml(bodyRunLines);
       const resolvedSubject = currentSubject || inferSubjectFromCategory(currentCategory);
-      out.push({ title: title, body: body, bodyHtml: bodyHtml, year: yearStr, category: currentCategory, subject: resolvedSubject, importance: importance });
+      const newEntry = { title: title, body: body, bodyHtml: bodyHtml, year: yearStr, category: currentCategory, subject: resolvedSubject, importance: importance };
+      if (sourceStr) newEntry.source = sourceStr;
+      out.push(newEntry);
       continue;
     }
     i++;
@@ -841,8 +845,21 @@ function parseTitleLineRuns(runList) {
   }
   return { title, yearTokensColored, importance };
 }
+// 出典として扱う文字色（Wordの見出し行でこの色の文字を出典に自動登録する）
+const SOURCE_TEXT_COLOR = '#f92269';
+function isSourceColor(color) {
+  return !!color && color.toLowerCase() === SOURCE_TEXT_COLOR;
+}
+function buildSourceFromTokens(yearTokensColored) {
+  const texts = [];
+  yearTokensColored.forEach(t => {
+    if (isSourceColor(t.color) && t.text && !texts.includes(t.text)) texts.push(t.text);
+  });
+  return texts.join(',');
+}
 function buildFilteredYearStr(yearTokensColored) {
   const kept = yearTokensColored.filter(t => {
+    if (isSourceColor(t.color)) return false; // 出典は年度頻度に数えない
     if (t.groupIsSu) return false;
     if (isOldBarExamColor(t.color)) return false;
     return true;
@@ -1011,6 +1028,12 @@ async function handleFiles(files) {
       ? carryOverStudyLogOnReimport(oldTouchedEntries, newEntries)
       : 0;
     if (carriedOverCount > 0) saveStudyLog();
+    // Wordに出典（#f92269の文字）が無い論証は、手動で入れた出典を同じタイトルから引き継ぐ
+    newEntries.forEach(ne => {
+      if (ne.source) return;
+      const prev = oldTouchedEntries.find(oe => oe.title === ne.title && oe.source);
+      if (prev) ne.source = prev.source;
+    });
     // 同じく、直接編集機能で手動で色付け・太字にした文言も、
     // 同一ないし類似の論証として引き継ぐ
     const carriedOverHighlightCount = (typeof carryOverManualHighlightsOnReimport === 'function')
