@@ -1942,3 +1942,4 @@ html { scrollbar-gutter: stable; }
 .importDiffGroup { margin-top: 8px; }
 .importDiffGroupTitle { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
 /* ▲▲▲ 復習キュー・正答率・タグ別進捗・条文ストック・書籍紐付け・読込差分 ここまで ▲▲▲ */
+.lawStockSubjectBtn { flex: 0 0 auto; }

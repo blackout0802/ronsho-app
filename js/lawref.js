@@ -357,6 +357,30 @@ function toggleLawRefInline(ref) {
   });
 }
 // --- 条文ストック（一覧タブ）：取得済みキャッシュを辞書として眺める ---
+// 条文ストックの科目分け：法律→科目の対応と、科目タブ・一覧の並び順
+const LAWREF_LAW_SUBJECT = {
+  constitution: '憲法', minpou: '民法', keiho: '刑法', shouhou: '商法', kaishahou: '商法',
+  minsou: '民事訴訟法', minshikkou: '民事訴訟法', minhozen: '民事訴訟法', minsaisei: '民事訴訟法', hasan: '民事訴訟法',
+  keisou: '刑事訴訟法',
+  gyousohou: '行政法', gyoufufukushinsa: '行政法', gyoutetsuzuki: '行政法', kokubai: '行政法', gyoudaishikkou: '行政法',
+  rouki: '労働法', roukumi: '労働法', roukeiyaku: '労働法'
+};
+const LAWREF_SUBJECT_ORDER = ['憲法', '民法', '刑法', '行政法', '商法', '民事訴訟法', '刑事訴訟法', '労働法', 'その他'];
+const LAWREF_LID_ORDER = Object.keys(LAWREF_LAWS);
+let lawStockSubjectFilter = 'all';
+function lawrefSubjectOf(lid) {
+  return LAWREF_LAW_SUBJECT[lid] || 'その他';
+}
+// 科目順 → 同じ科目内は法律の順 → 条番号 → 枝番号（「121条の2」は「121条」の次）
+function lawrefStockCompare(a, b) {
+  const sa = LAWREF_SUBJECT_ORDER.indexOf(a.subject), sb = LAWREF_SUBJECT_ORDER.indexOf(b.subject);
+  if (sa !== sb) return sa - sb;
+  const la = LAWREF_LID_ORDER.indexOf(a.lid), lb = LAWREF_LID_ORDER.indexOf(b.lid);
+  if (la !== lb) return la - lb;
+  const na = Number(a.num) || 0, nb = Number(b.num) || 0;
+  if (na !== nb) return na - nb;
+  return (Number(a.branch) || 0) - (Number(b.branch) || 0);
+}
 function lawrefStockList() {
   const cache = lawrefLoadCache();
   return Object.keys(cache).map(key => {
@@ -368,18 +392,29 @@ function lawrefStockList() {
     const branch = dash === -1 ? null : rest.slice(dash + 1);
     const lawName = (LAWREF_LAWS[lid] && LAWREF_LAWS[lid].name) || lid;
     return Object.assign({
-      key: key, lid: lid, num: num, branch: branch,
+      key: key, lid: lid, num: num, branch: branch, subject: lawrefSubjectOf(lid),
       label: lawName + num + '条' + (branch ? 'の' + branch : '')
     }, cache[key]);
-  }).sort((a, b) => (b.at || 0) - (a.at || 0));
+  }).sort(lawrefStockCompare);
 }
 function renderLawStockPage() {
   const area = document.getElementById('lawStockArea');
   if (!area) return;
-  const list = lawrefStockList();
+  const all = lawrefStockList();
+  const tabsEl = document.getElementById('lawStockSubjectTabs');
+  const subjects = LAWREF_SUBJECT_ORDER.filter(sub => all.some(x => x.subject === sub));
+  if (lawStockSubjectFilter !== 'all' && !subjects.includes(lawStockSubjectFilter)) lawStockSubjectFilter = 'all';
+  if (tabsEl) {
+    tabsEl.innerHTML = all.length === 0 ? '' : ['all'].concat(subjects).map(sub => {
+      const count = sub === 'all' ? all.length : all.filter(x => x.subject === sub).length;
+      return '<button type="button" class="progressViewToggleBtn lawStockSubjectBtn' + (lawStockSubjectFilter === sub ? ' active' : '')
+        + '" data-subject="' + escapeHtml(sub) + '">' + (sub === 'all' ? 'すべて' : escapeHtml(sub)) + '（' + count + '）</button>';
+    }).join('');
+  }
+  const list = lawStockSubjectFilter === 'all' ? all : all.filter(x => x.subject === lawStockSubjectFilter);
   const countEl = document.getElementById('lawStockProgress');
   if (countEl) countEl.textContent = list.length > 0 ? list.length + '件' : '';
-  if (list.length === 0) {
+  if (all.length === 0) {
     area.innerHTML = '<div class="quizEmpty">まだ取得した条文がありません。論証本文の条文リンクを押すとここに集まります。</div>';
     return;
   }
@@ -401,6 +436,13 @@ function initLawStockFeature() {
   const area = document.getElementById('lawStockArea');
   const clearBtn = document.getElementById('lawStockClearBtn');
   if (!area) return;
+  const subjectTabs = document.getElementById('lawStockSubjectTabs');
+  if (subjectTabs) subjectTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.lawStockSubjectBtn');
+    if (!btn) return;
+    lawStockSubjectFilter = btn.dataset.subject || 'all';
+    renderLawStockPage();
+  });
   area.addEventListener('click', (e) => {
     const viewBtn = e.target.closest('.lawStockViewBtn');
     if (viewBtn) {
